@@ -1,5 +1,13 @@
 # LLM ChatHub
 
+![Status: work in progress](https://img.shields.io/badge/status-work%20in%20progress-orange)
+
+> **🚧 Work in progress — actively developed.**
+> Nodes, panel options, settings keys and HTTP routes can still change from one commit
+> to the next, and a workflow saved today may gain a widget (or lose one) tomorrow.
+> Pin a commit if you need something stable. Bug reports, workflows and ideas are
+> welcome in the [issues](https://github.com/Verolelb/ComfyUI-LLM-ChatHub/issues).
+
 A complete chat client inside ComfyUI, wired to **LM Studio**, **Ollama (local)** or
 **Ollama Cloud**, with:
 
