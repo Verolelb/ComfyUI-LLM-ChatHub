@@ -83,6 +83,13 @@ Onglet **ChatHub** → bouton **Settings**.
    le premier modèle de la liste est retenu automatiquement.
 3. Colle la clé API seulement pour Ollama Cloud, puis **Save**.
 
+Changer de provider prend effet tout de suite : il devient le provider des nouvelles
+conversations **et** de celle affichée, donc le choix survit à un aller-retour vers
+*Apps* / *Templates*. La ligne de statut indique quel modèle la conversation utilise
+désormais ; **Save** ne sert plus qu'aux autres champs (température, prompt, RAG…).
+**+ New** ouvre immédiatement la nouvelle conversation, et si elle ne peut pas être
+créée l'erreur s'affiche au lieu de ne rien faire.
+
 Chaque provider n'annonce que **ses** modèles. Un Ollama local liste aussi les
 modèles cloud qu'il sait relayer (`…-cloud`, ou toute entrée portant un
 `remote_host`) : ils sont masqués dans la liste **Ollama (local)**, pour qu'un choix

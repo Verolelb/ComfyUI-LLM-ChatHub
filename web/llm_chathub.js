@@ -29,6 +29,7 @@ const state = {
   pending: [],
   draft: "",
   streaming: false,
+  streamingId: null,
   controller: null,
   showPanel: false,
   index: { documents: 0, chunks: 0, embedded: 0, folder: "" },
@@ -286,19 +287,32 @@ async function newConversation() {
   const settings = state.settings || {};
   const provider = settings.active_provider;
   const info = settings.providers?.[provider] || {};
-  await postJSON(`${BASE}/conversation/new`, {
-    provider,
-    model: info.model || "",
-    system_prompt: settings.chat?.system_prompt || settings.default_system_prompt || "",
-    rag_enabled: Boolean(settings.rag?.enabled),
-    rag_folder: settings.rag?.folder || "",
-    rag_top_k: settings.rag?.top_k ?? 4,
-    history_limit: settings.chat?.history_limit ?? 20,
-    temperature: settings.chat?.temperature ?? 0.7,
-    max_tokens: settings.chat?.max_tokens ?? 1024,
-  });
+  let created = null;
+  try {
+    created = await postJSON(`${BASE}/conversation/new`, {
+      provider,
+      model: info.model || "",
+      system_prompt: settings.chat?.system_prompt || settings.default_system_prompt || "",
+      rag_enabled: Boolean(settings.rag?.enabled),
+      rag_folder: settings.rag?.folder || "",
+      rag_top_k: settings.rag?.top_k ?? 4,
+      history_limit: settings.chat?.history_limit ?? 20,
+      temperature: settings.chat?.temperature ?? 0.7,
+      max_tokens: settings.chat?.max_tokens ?? 1024,
+    });
+  } catch (error) {
+    // Still refresh below: the conversation may have been stored even if the
+    // answer never came back, and the panel must show what actually exists.
+    setStatus(String(error.message || error), true);
+  }
   await refreshState();
-  if (state.conversations.length) await openConversation(state.conversations[0].id);
+  // Use the id the server returned, never "the first row": a just created
+  // conversation must open even while another one is being written.
+  const target =
+    created?.conversation?.id ||
+    state.conversation?.id ||
+    state.conversations[0]?.id;
+  if (target) await openConversation(target);
 }
 
 async function patchConversation(fields) {
@@ -444,6 +458,9 @@ async function reloadMessages() {
 /* ------------------------------------------------------------------ chat actions */
 
 function renderStreamingBubble(text, reasoning) {
+  // The user may have opened or created another conversation meanwhile: the
+  // running reply then belongs to the previous chat and must not be painted here.
+  if (state.streamingId && state.conversation && state.streamingId !== state.conversation.id) return;
   const container = rootEl?.querySelector(".llmch-messages");
   if (!container) return;
   let bubble = container.querySelector(".llmch-streaming");
@@ -481,6 +498,7 @@ async function sendMessage() {
   renderControls();
   setStatus("Sending...");
   state.streaming = true;
+  state.streamingId = state.conversation?.id || null;
   state.controller = new AbortController();
   renderControls();
 
@@ -508,6 +526,7 @@ async function sendMessage() {
     if (error.name !== "AbortError") setStatus(String(error.message || error), true);
   } finally {
     state.streaming = false;
+    state.streamingId = null;
     state.controller = null;
     await reloadMessages();
     await refreshState();
@@ -519,6 +538,7 @@ async function regenerate(messageId) {
   if (state.streaming) return;
   if (!state.conversation) return;
   state.streaming = true;
+  state.streamingId = state.conversation.id;
   state.controller = new AbortController();
   renderControls();
   setStatus("Regenerating...");
@@ -537,6 +557,7 @@ async function regenerate(messageId) {
     if (error.name !== "AbortError") setStatus(String(error.message || error), true);
   } finally {
     state.streaming = false;
+    state.streamingId = null;
     state.controller = null;
     await reloadMessages();
     renderAll();
@@ -659,7 +680,18 @@ function renderHeader() {
   return el("div", { class: "llmch-section" }, [
     el("div", { class: "llmch-row" }, [
       picker,
-      el("button", { class: "llmch-btn", text: "+ New", onclick: async () => { await newConversation(); renderAll(); } }),
+      el("button", {
+        class: "llmch-btn", text: "+ New",
+        onclick: async () => {
+          try {
+            await newConversation();
+            if (!state.error) setStatus("New conversation.");
+          } catch (error) {
+            setStatus(String(error.message || error), true);
+          }
+          renderAll();
+        },
+      }),
       el("button", {
         class: "llmch-btn", text: "Rename",
         disabled: !state.conversation,
@@ -695,6 +727,7 @@ function renderHeader() {
       indexChip,
       el("span", {
         class: "llmch-chip",
+        id: "llmch-provider-chip",
         text: `${provider?.label || state.conversation?.provider || "-"} / ${model}`,
         title: `URL: ${info.base_url || "-"}`,
       }),
@@ -779,12 +812,40 @@ function settingsPanel() {
     }
   }
 
-  providerSelect.addEventListener("change", () => {
-    const info = settings.providers?.[providerSelect.value] || {};
+  providerSelect.addEventListener("change", async () => {
+    const chosen = providerSelect.value;
+    const chosenLabel = PROVIDERS.find((item) => item.value === chosen)?.label || chosen;
+    const info = settings.providers?.[chosen] || {};
     baseUrl.value = info.base_url || "";
     model.value = info.model || "";
     modelOptions.replaceChildren();
-    fetchModels({ announce: true, force: true });
+    const models = await fetchModels({ announce: false, force: true, provider: chosen });
+    if (!model.value.trim() && models.length) model.value = models[0];
+    // The picker is the source of truth, immediately: remember the choice for the
+    // next conversations *and* move the open one, otherwise leaving the tab and
+    // coming back would silently restore the previous backend.
+    try {
+      const data = await postJSON(`${BASE}/settings`, {
+        active_provider: chosen,
+        // Remember the model shown here, so "+ New" starts on it too.
+        providers: { [chosen]: { model: model.value.trim() } },
+      });
+      state.settings = data.settings;
+      if (state.conversation) {
+        await patchConversation({ provider: chosen, model: model.value.trim() });
+      }
+      const chip = rootEl?.querySelector("#llmch-provider-chip");
+      if (chip) {
+        chip.textContent = `${chosenLabel} / ${model.value.trim() || "(no model selected)"}`;
+        chip.title = `URL: ${baseUrl.value || "-"}`;
+      }
+      setStatus(
+        `${models.length} model(s) on ${chosen}` +
+        (state.conversation ? ` - this conversation now uses ${model.value.trim() || "(no model yet)"}.` : "."),
+      );
+    } catch (error) {
+      setStatus(String(error.message || error), true);
+    }
   });
 
   const loadModels = el("button", {

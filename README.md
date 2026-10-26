@@ -76,6 +76,12 @@ ComfyUI/user/llm_chathub/
    If the field is empty the first model of the list is kept automatically.
 3. Paste the API key for Ollama Cloud only, then **Save**.
 
+Switching provider is immediate: it becomes the provider of new conversations **and**
+of the one on screen, so the choice survives a trip to *Apps* / *Templates* and back.
+The status line says which model the conversation now uses; **Save** is only needed for
+the other fields (temperature, prompt, RAG…). **+ New** opens the new chat right away,
+and if it cannot be created the error is shown instead of nothing happening.
+
 Each provider only advertises its **own** models. A local Ollama also reports the
 cloud models it can proxy (`…-cloud`, or anything tagged with a `remote_host`): those
 are hidden from the **Ollama (local)** list, so a local pick always runs on this

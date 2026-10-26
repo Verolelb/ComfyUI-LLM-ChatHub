@@ -138,7 +138,9 @@ def list_conversations() -> list[dict]:
     with connect() as connection:
         rows = connection.execute(
             "SELECT c.*, (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count "
-            "FROM conversations c ORDER BY c.updated_at DESC"
+            # rowid breaks ties: a conversation created in the same instant as the
+            # previous update still comes first, so "new chat" always reaches the top.
+            "FROM conversations c ORDER BY c.updated_at DESC, c.rowid DESC"
         ).fetchall()
     return [_row_to_conversation(row) for row in rows]
 
