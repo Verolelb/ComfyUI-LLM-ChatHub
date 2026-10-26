@@ -108,6 +108,7 @@ def chat_request(
     max_tokens: int = 1024,
     stream: bool = True,
     api_key: str = "",
+    seed: int | None = None,
 ) -> tuple[str, dict, dict]:
     if not model:
         raise ProviderError(
@@ -124,6 +125,8 @@ def chat_request(
         }
         if max_tokens and max_tokens > 0:
             payload["max_tokens"] = int(max_tokens)
+        if seed is not None:
+            payload["seed"] = int(seed)
         return url, _headers(api_key), payload
 
     url = endpoint(provider, base_url, "/api/chat")
@@ -135,6 +138,8 @@ def chat_request(
     }
     if max_tokens and max_tokens > 0:
         payload["options"]["num_predict"] = int(max_tokens)
+    if seed is not None:
+        payload["options"]["seed"] = int(seed)
     if provider == "ollama":
         payload["keep_alive"] = "30m"
     return url, _headers(api_key), payload
@@ -312,6 +317,7 @@ def stream_chat(
     timeout: float = 600.0,
     cancel: "threading.Event | None" = None,
     on_reasoning=None,
+    seed: int | None = None,
 ) -> Iterator[str]:
     """Yield answer deltas; reasoning deltas go to ``on_reasoning`` if provided."""
     provider = config.normalize_provider(provider)
@@ -324,6 +330,7 @@ def stream_chat(
         max_tokens=max_tokens,
         stream=True,
         api_key=api_key,
+        seed=seed,
     )
     try:
         response = requests.post(

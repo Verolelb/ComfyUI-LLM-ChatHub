@@ -198,6 +198,14 @@ Notes utiles :
 - Pour envoyer `reply` dans une node existante : glisse la sortie `reply` sur le
   widget texte voulu (ex. `text` de *CLIP Text Encode*) — il se transforme en entrée —
   ou clic droit sur le widget → *Convert text to input*.
+- La **Seed** (node Chat) a le contrôle habituel juste en dessous — `fixed`,
+  `increment`, `decrement`, `randomize` — et part vers le modèle (`seed` pour
+  LM Studio, `options.seed` pour Ollama et Ollama Cloud). Elle est sur **`fixed`** par
+  défaut : le même prompt réutilise la réponse en cache de ComfyUI, tandis que
+  `randomize`/`increment` redemandent au modèle. Les anciens workflows la chargent à
+  `seed = 0`, et c'est une entrée `control_after_generate` classique : même
+  comportement avec les deux schémas de définition de nœud (v1 `INPUT_TYPES`,
+  v3 `io.Int`).
 - Le champ `session_id` accepte un identifiant libre (`story_01`) ou `auto` : dans ce
   cas chaque node **Chat** garde sa propre conversation (clé = node id).
 - `history_limit = 0` dans la Session signifie « tout l'historique disponible ».

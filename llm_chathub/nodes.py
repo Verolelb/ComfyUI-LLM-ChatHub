@@ -247,6 +247,18 @@ class LCChat:
                 "image_mode": (IMAGE_MODE_CHOICES,),
                 "persist": ("BOOLEAN", {"default": True}),
                 "context": ("STRING", {"default": "", "multiline": True}),
+                # ``control_after_generate`` gives the usual fixed / randomize /
+                # increment / decrement control under the value, from either node
+                # definition (v1 INPUT_TYPES here, v3 ``io.Int`` for new nodes).
+                "seed": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 0xffffffffffffffff,
+                    # "fixed" instead of True: the value is the control's default mode,
+                    # so a chat node keeps answering the same until you ask otherwise.
+                    "control_after_generate": "fixed",
+                    "tooltip": "Sampling seed sent to the model. Fixed reuses the cached answer, randomize/increment asks again.",
+                }),
             },
             "optional": {"image": ("IMAGE",)},
         }
@@ -256,7 +268,7 @@ class LCChat:
     FUNCTION = "run"
     CATEGORY = CATEGORY
 
-    def run(self, session, message, image_mode, persist, context="", image=None):
+    def run(self, session, message, image_mode, persist, context="", seed=0, image=None):
         conversation_id = session.get("conversation_id")
         conf = session.get("config") or {}
         connection = {
@@ -293,6 +305,7 @@ class LCChat:
                 attach_b64=None if persist else payloads,
                 persist=bool(persist),
                 connection=connection,
+                seed=None if seed is None else int(seed),
                 **overrides,
             )
             if result.get("error") and not result.get("reply"):

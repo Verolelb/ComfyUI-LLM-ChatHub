@@ -240,6 +240,7 @@ def run_chat(
     persist: bool = True,
     connection: dict | None = None,
     create_if_missing: bool = True,
+    seed: int | None = None,
     **overrides,
 ) -> dict:
     """Send one user turn and return the assistant reply.
@@ -323,6 +324,7 @@ def run_chat(
             timeout=resolved["timeout"],
             cancel=cancel,
             on_reasoning=push_reasoning,
+            seed=seed,
         ):
             buffer.append(delta)
             if on_delta:
@@ -346,6 +348,7 @@ def run_chat(
             meta={
                 "provider": resolved["provider"],
                 "model": conversation.get("model") or resolved["model"],
+                "seed": seed,
                 "seconds": round(time.time() - started, 2),
                 "rag": [os.path.basename(r.get("source") or "") for r in rag_results],
                 "cancelled": cancelled,
