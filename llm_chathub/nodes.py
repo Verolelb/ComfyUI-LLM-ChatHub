@@ -17,8 +17,44 @@ CATEGORY = "LLM ChatHub"
 CONFIG_TYPE = "CHATHUB_CONFIG"
 SESSION_TYPE = "CHATHUB_SESSION"
 
-USE_PANEL = "panel (reglages enregistres)"
+USE_PANEL = "panel (saved settings)"
+# The panel entry and the combo values below used to be French; workflows saved back
+# then still carry those strings, so every alias is accepted on the way in.
+PANEL_CHOICES = {USE_PANEL, "panel (reglages enregistres)", "panel"}
 PROVIDER_CHOICES = [USE_PANEL, "lmstudio", "ollama", "ollama_cloud"]
+
+RESET_CHOICES = ["none", "clear history", "resume from system prompt"]
+RESET_ALIASES = {
+    "aucun": "none",
+    "effacer l'historique": "clear history",
+    "reprendre avec le prompt systeme": "resume from system prompt",
+}
+
+IMAGE_MODE_CHOICES = ["first image", "every image in the batch"]
+IMAGE_MODE_ALIASES = {
+    "premiere image": "first image",
+    "chaque image du lot": "every image in the batch",
+}
+
+HISTORY_OPERATIONS = [
+    "nothing",
+    "clear all",
+    "delete the last N messages",
+    "truncate to N messages",
+    "set the system prompt",
+]
+HISTORY_ALIASES = {
+    "rien": "nothing",
+    "effacer tout": "clear all",
+    "supprimer les N derniers messages": "delete the last N messages",
+    "tronquer a N messages": "truncate to N messages",
+    "definir le prompt systeme": "set the system prompt",
+}
+
+
+def _upgrade(value: str, aliases: dict) -> str:
+    """Map a widget value saved before the translation onto its English name."""
+    return aliases.get((value or "").strip(), value)
 
 
 def _slug(value: str) -> str:
@@ -36,7 +72,7 @@ def _make_config(
     history_limit: int = 20,
     embed_model: str = "",
 ) -> dict:
-    name = None if provider_choice == USE_PANEL else provider_choice
+    name = None if provider_choice in PANEL_CHOICES else provider_choice
     resolved = config.resolve_provider(
         name,
         model=(model or "").strip() or None,
@@ -61,7 +97,7 @@ def _make_config(
 def _transcript(messages: list[dict]) -> str:
     lines = []
     for message in messages:
-        role = {"user": "Utilisateur", "assistant": "Assistant", "system": "Systeme"}.get(
+        role = {"user": "User", "assistant": "Assistant", "system": "System"}.get(
             message.get("role"), message.get("role")
         )
         images = message.get("images") or []
@@ -101,8 +137,8 @@ class LCProvider:
             provider, base_url, model, api_key, temperature, max_tokens, history_limit, embed_model
         )
         info = (
-            f"{conf['label']} | url={conf['base_url']} | model={conf['model'] or '(aucun)'} "
-            f"| cle={'oui' if conf['api_key'] else 'non'}"
+            f"{conf['label']} | url={conf['base_url']} | model={conf['model'] or '(none)'} "
+            f"| key={'yes' if conf['api_key'] else 'no'}"
         )
         return (conf, info)
 
@@ -119,7 +155,7 @@ class LCSession:
                 "system_prompt": ("STRING", {"default": "", "multiline": True}),
                 "reference_text": ("STRING", {"default": "", "multiline": True}),
                 "history_limit": ("INT", {"default": 0, "min": 0, "max": 200}),
-                "reset": (["aucun", "effacer l'historique", "reprendre avec le prompt systeme"],),
+                "reset": (RESET_CHOICES,),
                 "rag_enabled": ("BOOLEAN", {"default": False}),
                 "rag_folder": ("STRING", {"default": "", "multiline": False}),
                 "rag_top_k": ("INT", {"default": 4, "min": 1, "max": 20}),
@@ -145,6 +181,7 @@ class LCSession:
         rag_top_k,
         unique_id=None,
     ):
+        reset = _upgrade(reset, RESET_ALIASES)
         raw = (session_id or "").strip()
         if not raw or raw.lower() == "auto":
             conversation_id = f"conv_node_{_slug(str(unique_id or '0'))}"
@@ -173,9 +210,9 @@ class LCSession:
         elif fields:
             conversation = store.update_conversation(conversation_id, **fields) or conversation
 
-        if reset == "effacer l'historique":
+        if reset == "clear history":
             store.truncate_messages(conversation_id, 0)
-        elif reset == "reprendre avec le prompt systeme":
+        elif reset == "resume from system prompt":
             store.truncate_messages(conversation_id, 1)
 
         messages = store.list_messages(conversation_id)
@@ -197,7 +234,7 @@ class LCChat:
             "required": {
                 "session": (SESSION_TYPE,),
                 "message": ("STRING", {"default": "", "multiline": True}),
-                "image_mode": (["premiere image", "chaque image du lot"],),
+                "image_mode": (IMAGE_MODE_CHOICES,),
                 "persist": ("BOOLEAN", {"default": True}),
                 "context": ("STRING", {"default": "", "multiline": True}),
             },
@@ -227,12 +264,13 @@ class LCChat:
         if session.get("history_limit"):
             overrides["history_limit"] = session["history_limit"]
 
+        image_mode = _upgrade(image_mode, IMAGE_MODE_ALIASES)
         text = (message or "").strip()
         if context.strip():
-            text = f"--- CONTEXTE ---\n{context.strip()}\n--- FIN CONTEXTE ---\n\n{text}"
+            text = f"--- CONTEXT ---\n{context.strip()}\n--- END OF CONTEXT ---\n\n{text}"
 
         frames = engine.split_image_batch(image) if image is not None else [None]
-        if image_mode == "premiere image":
+        if image_mode == "first image":
             frames = frames[:1]
 
         replies = []
@@ -251,8 +289,8 @@ class LCChat:
                 raise RuntimeError(result["error"])
             if not result.get("reply") and result.get("reasoning"):
                 raise RuntimeError(
-                    "Le modele a raisonne sans produire de reponse: augmente 'max_tokens' "
-                    "(le raisonnement consomme le budget)."
+                    "The model reasoned without producing a reply: raise 'max_tokens' "
+                    "(the reasoning consumes the budget)."
                 )
             replies.append(result.get("reply") or "")
 
@@ -298,15 +336,15 @@ class LCRagIndex:
             replace=bool(replace),
         )
         lines = [
-            f"Dossier : {summary['folder']}",
-            f"Documents indexes : {summary['documents']}",
-            f"Extraits : {summary['chunks']}",
-            f"Embeddings : {'oui' if summary['embedded'] else 'non (repli mots-cles)'}",
+            f"Folder: {summary['folder']}",
+            f"Documents indexed: {summary['documents']}",
+            f"Excerpts: {summary['chunks']}",
+            f"Embeddings: {'yes' if summary['embedded'] else 'no (keyword fallback)'}",
         ]
         if summary.get("embedding_warning"):
-            lines.append(f"Avertissement embeddings : {summary['embedding_warning']}")
+            lines.append(f"Embedding warning: {summary['embedding_warning']}")
         if summary.get("skipped"):
-            lines.append(f"Ignores : {', '.join(summary['skipped'][:10])}")
+            lines.append(f"Skipped: {', '.join(summary['skipped'][:10])}")
         return ("\n".join(lines), int(summary["chunks"]), int(summary["documents"]))
 
 
@@ -384,15 +422,7 @@ class LCHistoryEdit:
         return {
             "required": {
                 "session": (SESSION_TYPE,),
-                "operation": (
-                    [
-                        "rien",
-                        "effacer tout",
-                        "supprimer les N derniers messages",
-                        "tronquer a N messages",
-                        "definir le prompt systeme",
-                    ],
-                ),
+                "operation": (HISTORY_OPERATIONS,),
                 "count": ("INT", {"default": 1, "min": 0, "max": 500}),
                 "new_system_prompt": ("STRING", {"default": "", "multiline": True}),
             }
@@ -404,17 +434,18 @@ class LCHistoryEdit:
     CATEGORY = CATEGORY
 
     def run(self, session, operation, count, new_system_prompt):
+        operation = _upgrade(operation, HISTORY_ALIASES)
         conversation_id = session.get("conversation_id") or ""
         messages = store.list_messages(conversation_id)
 
-        if operation == "effacer tout" and messages:
+        if operation == "clear all" and messages:
             store.truncate_messages(conversation_id, 0)
-        elif operation == "supprimer les N derniers messages" and messages:
+        elif operation == "delete the last N messages" and messages:
             keep = max(0, len(messages) - int(count))
             store.truncate_messages(conversation_id, keep)
-        elif operation == "tronquer a N messages":
+        elif operation == "truncate to N messages":
             store.truncate_messages(conversation_id, int(count))
-        elif operation == "definir le prompt systeme":
+        elif operation == "set the system prompt":
             store.update_conversation(conversation_id, system_prompt=new_system_prompt or "")
 
         messages = store.list_messages(conversation_id)
@@ -433,10 +464,10 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "LLMChatHubProvider": "LLM ChatHub - Provider (LM Studio / Ollama)",
-    "LLMChatHubSession": "LLM ChatHub - Session + prompt de depart",
+    "LLMChatHubSession": "LLM ChatHub - Session + starting prompt",
     "LLMChatHubChat": "LLM ChatHub - Chat",
     "LLMChatHubRagIndex": "LLM ChatHub - RAG Indexer",
     "LLMChatHubRagRetrieve": "LLM ChatHub - RAG Retrieve",
-    "LLMChatHubHistory": "LLM ChatHub - Historique (lecture)",
-    "LLMChatHubHistoryEdit": "LLM ChatHub - Historique (edition)",
+    "LLMChatHubHistory": "LLM ChatHub - History (read)",
+    "LLMChatHubHistoryEdit": "LLM ChatHub - History (edit)",
 }

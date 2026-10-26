@@ -101,8 +101,8 @@ def chat_request(
 ) -> tuple[str, dict, dict]:
     if not model:
         raise ProviderError(
-            "Aucun modele selectionne. Utilise le bouton « Charger les modeles » du panneau "
-            f"puis choisis-en un. Rappel: {provider_hint(provider)}"
+            'No model selected. Click "Load models" in the panel, then pick one. '
+            f"Hint: {provider_hint(provider)}"
         )
     if provider == "lmstudio":
         url = endpoint(provider, base_url, "/chat/completions")
@@ -151,7 +151,7 @@ def parse_chunk(provider: str, raw: str) -> dict | None:
         except json.JSONDecodeError:
             return None
         if isinstance(parsed, dict) and parsed.get("error"):
-            raise ProviderError(f"Erreur du provider: {parsed['error']}")
+            raise ProviderError(f"Provider error: {parsed['error']}")
         choices = parsed.get("choices") or []
         if not choices:
             return None
@@ -165,7 +165,7 @@ def parse_chunk(provider: str, raw: str) -> dict | None:
     except json.JSONDecodeError:
         return None
     if isinstance(parsed, dict) and parsed.get("error"):
-        raise ProviderError(f"Erreur du provider: {parsed['error']}")
+        raise ProviderError(f"Provider error: {parsed['error']}")
     message = parsed.get("message") if isinstance(parsed.get("message"), dict) else {}
     content = message.get("content") or parsed.get("response") or None
     reasoning = message.get("thinking") or None
@@ -180,13 +180,13 @@ def _chunk(content, reasoning) -> dict | None:
 
 def parse_completion(provider: str, data: dict) -> str:
     if not isinstance(data, dict):
-        raise ProviderError("Reponse inattendue du provider.")
+        raise ProviderError("Unexpected reply from the provider.")
     if data.get("error"):
-        raise ProviderError(f"Erreur du provider: {data['error']}")
+        raise ProviderError(f"Provider error: {data['error']}")
     if provider == "lmstudio":
         choices = data.get("choices") or []
         if not choices:
-            raise ProviderError("Reponse vide du provider.")
+            raise ProviderError("Empty reply from the provider.")
         return (choices[0].get("message") or {}).get("content") or ""
     return (data.get("message") or {}).get("content") or data.get("response") or ""
 
@@ -203,9 +203,9 @@ def embedding_request(
 
 def parse_embeddings(provider: str, data: dict, count: int) -> list[list[float]]:
     if not isinstance(data, dict):
-        raise ProviderError("Reponse d'embedding inattendue.")
+        raise ProviderError("Unexpected embedding response.")
     if data.get("error"):
-        raise ProviderError(f"Erreur du provider: {data['error']}")
+        raise ProviderError(f"Provider error: {data['error']}")
     if provider == "lmstudio":
         items = data.get("data") or []
         vectors = [item.get("embedding") or [] for item in items]
@@ -213,7 +213,7 @@ def parse_embeddings(provider: str, data: dict, count: int) -> list[list[float]]
         vectors = data.get("embeddings") or []
     if len(vectors) != count:
         raise ProviderError(
-            f"Embeddings incomplets: {len(vectors)} vecteurs recus pour {count} textes."
+            f"Incomplete embeddings: {len(vectors)} vectors received for {count} texts."
         )
     return [list(map(float, vector)) for vector in vectors]
 
@@ -227,28 +227,28 @@ def _raise_http(provider: str, status: int, body: str) -> None:
         detail = detail[:400] + "..."
     if status in (401, 403):
         hint = (
-            "Cle API manquante ou invalide: renseigne-la dans le panneau ChatHub."
+            "Missing or invalid API key: set it in the ChatHub panel."
             if provider != "lmstudio"
-            else "LM Studio a refuse la requete (token LM_API_TOKEN ?)."
+            else "LM Studio refused the request (LM_API_TOKEN?)."
         )
-        raise ProviderError(f"HTTP {status} sur {provider}. {hint} {detail}")
+        raise ProviderError(f"HTTP {status} for {provider}. {hint} {detail}")
     if status == 404:
         raise ProviderError(
-            f"HTTP 404 sur {provider}: endpoint ou modele inconnu. "
-            f"Verifie le modele et l'URL de base. {detail}"
+            f"HTTP 404 for {provider}: unknown endpoint or model. "
+            f"Check the model name and the base URL. {detail}"
         )
-    raise ProviderError(f"HTTP {status} sur {provider}. {detail}")
+    raise ProviderError(f"HTTP {status} for {provider}. {detail}")
 
 
 def _connection_error(provider: str, error: Exception) -> ProviderError:
     reason = connection_reason(error)
     if provider == "ollama_cloud":
         return ProviderError(
-            f"Impossible de joindre Ollama Cloud ({reason}). Verifie ta connexion internet "
-            "et ta cle API (https://ollama.com/settings/keys)."
+            f"Could not reach Ollama Cloud ({reason}). Check your internet connection "
+            "and your API key (https://ollama.com/settings/keys)."
         )
     return ProviderError(
-        f"Impossible de joindre {provider} ({reason}). Le serveur local est-il lance ? "
+        f"Could not reach {provider} ({reason}). Is the local server running? "
         f"{provider_hint(provider)}"
     )
 
@@ -271,7 +271,7 @@ def list_models(provider: str, base_url: str, api_key: str = "", timeout: float 
     try:
         data = response.json()
     except ValueError as error:
-        raise ProviderError(f"Reponse illisible de {provider}: {error}") from error
+        raise ProviderError(f"Unreadable reply from {provider}: {error}") from error
     if provider == "lmstudio":
         names = [item.get("id", "") for item in (data.get("data") or [])]
     else:
@@ -353,7 +353,7 @@ def embed_texts(
     if not texts:
         return []
     if not model:
-        raise ProviderError("Aucun modele d'embedding configure (RAG).")
+        raise ProviderError("No embedding model configured (RAG).")
     url, headers, payload = embedding_request(provider, base_url, model, texts, api_key)
     try:
         response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=timeout)
@@ -380,7 +380,7 @@ def embed_texts(
     try:
         data = response.json()
     except ValueError as error:
-        raise ProviderError(f"Reponse d'embedding illisible: {error}") from error
+        raise ProviderError(f"Unreadable embedding response: {error}") from error
     return parse_embeddings(provider, data, len(texts))
 
 

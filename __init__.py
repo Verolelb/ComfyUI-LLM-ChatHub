@@ -20,4 +20,4 @@ __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 try:
     routes.register_routes()
 except Exception as error:  # pragma: no cover - nodes still load if the API fails
-    LOGGER.warning("llm_chathub: impossible d'enregistrer les routes API (%s)", error)
+    LOGGER.warning("llm_chathub: could not register the API routes (%s)", error)

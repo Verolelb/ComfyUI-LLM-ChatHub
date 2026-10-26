@@ -59,7 +59,7 @@ ComfyUI/user/llm_chathub/
 
 ## 2. Configure a provider
 
-**ChatHub** tab → **Reglages** button.
+**ChatHub** tab → **Settings** button.
 
 | Provider | Default base URL | API key |
 |---|---|---|
@@ -68,9 +68,9 @@ ComfyUI/user/llm_chathub/
 | `ollama_cloud` | `https://ollama.com` | **yes** (https://ollama.com/settings/keys) |
 
 1. Pick the provider.
-2. **Charger les modeles** (or **Tester la connexion**): the list of available models
-   is fetched from the server, then you pick one in the dropdown.
-3. Paste the API key for Ollama Cloud only, then **Enregistrer**.
+2. **Load models** (or **Test connection**): the list of available models is fetched
+   from the server, then you pick one in the dropdown.
+3. Paste the API key for Ollama Cloud only, then **Save**.
 
 The key can also come from an environment variable: `OLLAMA_API_KEY`,
 `LMSTUDIO_API_KEY` / `LM_API_TOKEN`.
@@ -81,26 +81,26 @@ The panel is the **ChatHub** button in ComfyUI's left vertical icon bar (between
 and *Templates*). One click opens it, a second click on the same tab closes it; drag
 its right edge to widen the sidebar if the text looks clipped.
 
-1. **+ Nouveau** creates a conversation.
-2. Open **Reglages** to set:
+1. **+ New** creates a conversation.
+2. Open **Settings** to set:
    - the **starting prompt** (system instructions, e.g. "You write storyboard prompts
      in English, JSON format"),
    - the **reference context** (free text always included: style, brand guidelines,
      glossary…),
    - temperature, max tokens and how many **history turns** are sent.
-3. To give documents to the model: tick **RAG actif**, then in **Reglages** →
-   *RAG documents* click **Ajouter des documents** and pick your files
+3. To give documents to the model: tick **RAG on**, then in **Settings** →
+   *RAG documents* click **Add documents** and pick your files
    (`.txt .md .json .csv .srt .py .html`… several at once). They are copied into
    `ComfyUI/user/llm_chathub/documents/`, listed in the panel (size + `x` to remove)
    and **indexed automatically**: the answer cites the source it used.
    The folder field also accepts a full path (e.g. `D:\projects\docs`) to index an
-   existing tree, then **Indexer les documents**. The **Tester le RAG** button shows
-   the excerpts the model would receive for a question.
+   existing tree, then **Index documents**. The **Test RAG** button shows the excerpts
+   the model would receive for a question.
    Binary PDF/DOCX files are not read: convert them to text first.
-4. Write your message, attach one or more images with **Image**, **Envoyer**.
+4. Write your message, attach one or more images with **Image**, **Send**.
    The answer streams in.
-5. On each message: **Copier**, **Modifier** (replays what follows), **Regenerer**,
-   **Supprimer**, **Tronquer ici**.
+5. On each message: **Copy**, **Edit** (replays what follows), **Regenerate**,
+   **Delete**, **Truncate here**.
 
 The selector at the top lists every saved conversation; everything survives a ComfyUI
 restart.
@@ -109,10 +109,10 @@ restart.
 
 Reasoning models (Qwen3, DeepSeek-R1, Gemma "thinking", …) stream their chain of
 thought separately from the answer. ChatHub shows it in a collapsible
-**« Reflexion du modele »** block and never mixes it into the reply.
+**Model reasoning** block and never mixes it into the reply.
 
 Note: on those models the reasoning consumes the `Max tokens` budget. If the answer
-comes back empty with "Le modele a raisonne sans repondre", raise `Max tokens` (2000 to
+comes back empty with "The model reasoned without replying", raise `Max tokens` (2000 to
 4000 is a good starting point). An empty answer is never sent back to the model in the
 following turns.
 
@@ -121,12 +121,12 @@ following turns.
 | Node | Role |
 |---|---|
 | **LLM ChatHub - Provider (LM Studio / Ollama)** | picks provider / URL / model / temperature / max tokens. |
-| **LLM ChatHub - Session + prompt de depart** | opens (or clears) a persistent conversation and sets the system prompt, reference context and RAG. The **RAG upload (fichiers)** button imports documents straight from the node. |
+| **LLM ChatHub - Session + starting prompt** | opens (or clears) a persistent conversation and sets the system prompt, reference context and RAG. The **RAG upload (files)** button imports documents straight from the node. |
 | **LLM ChatHub - Chat** | sends a message (+ optional image + optional context) and returns the answer. |
 | **LLM ChatHub - RAG Indexer** | indexes a folder of documents. |
 | **LLM ChatHub - RAG Retrieve** | returns the relevant excerpts for a query. |
-| **LLM ChatHub - Historique (lecture)** | reads the conversation back inside the graph. |
-| **LLM ChatHub - Historique (edition)** | clears / truncates / changes the system prompt. |
+| **LLM ChatHub - History (read)** | reads the conversation back inside the graph. |
+| **LLM ChatHub - History (edit)** | clears / truncates / changes the system prompt. |
 
 Typical chain:
 
@@ -136,9 +136,9 @@ Provider ─► Session ─► Chat(reply) ─► your workflow (CLIPTextEncode,
                         └── RAG Retrieve(context)   (or the Chat node's context field)
 ```
 
-### The Session node's "RAG upload (fichiers)" button
+### The Session node's "RAG upload (files)" button
 
-Below `rag_top_k`, the **RAG upload (fichiers)** button opens the browser's file picker:
+Below `rag_top_k`, the **RAG upload (files)** button opens the browser's file picker:
 the chosen documents are copied into `ComfyUI/user/llm_chathub/documents/` (the same
 folder the panel uses), `rag_folder` is filled with that folder, `rag_enabled` is
 switched *on*, and the index is rebuilt right away. While indexing the button shows
@@ -268,11 +268,11 @@ chat("Give me 5 cinematic prompt ideas")
 
 ## 6. Troubleshooting
 
-- **"Impossible de joindre lmstudio ..."**: start LM Studio → *Developer* → *Start
+- **"Could not reach lmstudio ..."**: start LM Studio → *Developer* → *Start
   Server*, or `ollama serve`.
 - **HTTP 401/403 on ollama_cloud**: missing or invalid API key.
 - **HTTP 404**: the model name does not exist on the server — use
-  *Charger les modeles*.
+  *Load models*.
 - **A document is ignored**: only text formats are read (no PDF/DOCX), and files that
   are too short (fewer than 20 useful characters) are skipped.
 - **RAG answers poorly / no embeddings used**: set an embedding model
@@ -282,7 +282,7 @@ chat("Give me 5 cinematic prompt ideas")
 - **Empty answer although the model "thought"**: raise `Max tokens`, the reasoning ate
   the budget.
 - **Odd accents (`cinÃ©ma`)**: a conversation saved before the encoding fix can contain
-  corrupted text and the model copies it back; start a new conversation (**+ Nouveau**).
+  corrupted text and the model copies it back; start a new conversation (**+ New**).
 - **Answers take a while**: the panel shows tokens as they arrive; the Chat node waits
   for the whole generation.
 - Logs: `ComfyUI/user/comfyui.log`, plus the browser console (`[LLM ChatHub]`).

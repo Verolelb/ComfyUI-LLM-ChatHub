@@ -59,8 +59,8 @@ def _safe(handler):
         except ValueError as error:
             return _json_error(str(error), 409)
         except Exception as error:  # noqa: BLE001
-            LOGGER.warning("llm_chathub %s a echoue: %s", request.path, error)
-            return _json_error(f"Erreur interne: {error}", 500)
+            LOGGER.warning("llm_chathub %s failed: %s", request.path, error)
+            return _json_error(f"Internal error: {error}", 500)
 
     return wrapper
 
@@ -244,7 +244,7 @@ def register_routes() -> None:
         conversation_id = request.query.get("id") or ""
         conversation = store.get_conversation(conversation_id)
         if not conversation:
-            return _json_error("Conversation introuvable.", 404)
+            return _json_error("Conversation not found.", 404)
         messages = store.list_messages(conversation_id)
         return web.json_response(
             {
@@ -261,7 +261,7 @@ def register_routes() -> None:
         fields = {key: data[key] for key in data if key in store.CONVERSATION_FIELDS}
         conversation_id = data.get("id") or None
         if conversation_id and store.get_conversation(conversation_id):
-            raise ValueError(f"La conversation {conversation_id} existe deja.")
+            raise ValueError(f"Conversation {conversation_id} already exists.")
         conversation = store.create_conversation(id=conversation_id, **fields)
         config.update_settings({"last_conversation": conversation["id"]})
         return web.json_response({"ok": True, "conversation": _public_conversation(conversation)})
@@ -276,7 +276,7 @@ def register_routes() -> None:
         fields = {key: data[key] for key in data if key in store.CONVERSATION_FIELDS}
         conversation = store.update_conversation(conversation_id, **fields)
         if not conversation:
-            return _json_error("Conversation introuvable.", 404)
+            return _json_error("Conversation not found.", 404)
         return web.json_response({"ok": True, "conversation": _public_conversation(conversation)})
 
     @routes.post("/llm_chathub/conversation/delete")
@@ -297,7 +297,7 @@ def register_routes() -> None:
         conversation_id = data.get("conversation_id") or None
         images = data.get("images") or []
         if not text and not images:
-            return _json_error("Message vide.")
+            return _json_error("Empty message.")
         forward = data.get("overrides") or {}
 
         def worker(emit):
@@ -318,7 +318,7 @@ def register_routes() -> None:
         conversation_id = data.get("conversation_id")
         message_id = data.get("message_id")
         if not conversation_id:
-            return _json_error("conversation_id manquant.")
+            return _json_error("conversation_id is required.")
 
         def worker(emit):
             return engine.regenerate(
@@ -345,7 +345,7 @@ def register_routes() -> None:
         conversation_id = data.get("conversation_id")
         message_id = data.get("message_id")
         if not conversation_id or not message_id:
-            return _json_error("conversation_id et message_id requis.")
+            return _json_error("conversation_id and message_id are required.")
         try:
             engine.edit_message(conversation_id, message_id, data.get("content") or "", data.get("images"))
         except Exception as error:  # noqa: BLE001
@@ -363,7 +363,7 @@ def register_routes() -> None:
         conversation_id = data.get("conversation_id")
         message_id = data.get("message_id")
         if not message_id or not conversation_id:
-            return _json_error("conversation_id et message_id requis.")
+            return _json_error("conversation_id and message_id are required.")
         if data.get("from_here"):
             store.delete_from_message(conversation_id, message_id, include=True)
         else:
@@ -380,7 +380,7 @@ def register_routes() -> None:
         data = await _payload(request)
         conversation_id = data.get("conversation_id")
         if not conversation_id:
-            return _json_error("conversation_id manquant.")
+            return _json_error("conversation_id is required.")
         store.truncate_messages(conversation_id, int(data.get("keep") or 0))
         return web.json_response(
             {
@@ -401,21 +401,21 @@ def register_routes() -> None:
             suffix = ".png"
         payload = data.get("data") or ""
         if not payload:
-            return _json_error("Image vide.")
+            return _json_error("Empty image.")
         try:
             stored = engine.save_base64_image(payload, suffix)
         except Exception as error:  # noqa: BLE001
-            return _json_error(f"Enregistrement impossible: {error}")
+            return _json_error(f"Could not save the image: {error}")
         return web.json_response({"ok": True, "name": stored, "url": f"/llm_chathub/image/{stored}"})
 
     @routes.get("/llm_chathub/image/{name}")
     async def image(request: web.Request):
         name = request.match_info.get("name", "")
         if not _SAFE_NAME.match(name):
-            return _json_error("Nom invalide.", 400)
+            return _json_error("Invalid name.", 400)
         path = os.path.join(config.images_dir(), name)
         if not os.path.isfile(path):
-            return _json_error("Image introuvable.", 404)
+            return _json_error("Image not found.", 404)
         response = web.FileResponse(path)
         response.headers["Cache-Control"] = "public, max-age=604800"
         return response
@@ -434,7 +434,7 @@ def register_routes() -> None:
         data = await _payload(request)
         files = data.get("files")
         if not isinstance(files, list) or not files:
-            return _json_error("Aucun fichier recu.")
+            return _json_error("No file received.")
         folder = config.documents_dir()
         os.makedirs(folder, exist_ok=True)
         max_bytes = int(float(data.get("max_file_mb") or 8.0) * 1024 * 1024)
@@ -444,29 +444,29 @@ def register_routes() -> None:
                 continue
             name = _document_name(str(item.get("name") or ""))
             if not name:
-                skipped.append("(nom invalide)")
+                skipped.append("(invalid name)")
                 continue
             if os.path.splitext(name)[1].lower() not in rag.TEXT_EXTENSIONS:
-                skipped.append(f"{name} (format non lu par le RAG)")
+                skipped.append(f"{name} (format not read by the RAG)")
                 continue
             payload = str(item.get("data") or "")
             if not payload:
-                skipped.append(f"{name} (vide)")
+                skipped.append(f"{name} (empty)")
                 continue
             try:
                 raw = base64.b64decode(payload.split(",", 1)[1] if payload.startswith("data:") else payload)
             except Exception:
-                skipped.append(f"{name} (contenu illisible)")
+                skipped.append(f"{name} (unreadable content)")
                 continue
             if len(raw) > max_bytes:
-                skipped.append(f"{name} (plus de {max_bytes // (1024 * 1024)} Mo)")
+                skipped.append(f"{name} (over {max_bytes // (1024 * 1024)} MB)")
                 continue
             with open(os.path.join(folder, name), "wb") as handle:
                 handle.write(raw)
             saved.append(name)
         if not saved:
             return web.json_response(
-                {"ok": False, "error": "Aucun fichier enregistre.", "skipped": skipped, "folder": folder},
+                {"ok": False, "error": "No file saved.", "skipped": skipped, "folder": folder},
                 status=400,
             )
         return web.json_response(
@@ -479,7 +479,7 @@ def register_routes() -> None:
         data = await _payload(request)
         name = _document_name(str(data.get("name") or ""))
         if not name:
-            return _json_error("Nom manquant.")
+            return _json_error("Missing name.")
         path = os.path.join(config.documents_dir(), name)
         if os.path.isfile(path):
             os.remove(path)
@@ -503,7 +503,7 @@ def register_routes() -> None:
         data = await _payload(request)
         folder = (data.get("folder") or "").strip() or config.documents_dir()
         if not os.path.isdir(folder):
-            return _json_error(f"Dossier introuvable: {folder}")
+            return _json_error(f"Folder not found: {folder}")
         resolved = config.resolve_provider(data.get("provider"))
         options = {
             "provider": resolved["provider"],

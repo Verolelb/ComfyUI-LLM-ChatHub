@@ -18,7 +18,7 @@ from . import config
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS conversations (
     id            TEXT PRIMARY KEY,
-    title         TEXT NOT NULL DEFAULT 'Nouveau chat',
+    title         TEXT NOT NULL DEFAULT 'New chat',
     created_at    REAL NOT NULL,
     updated_at    REAL NOT NULL,
     provider      TEXT NOT NULL DEFAULT '',
@@ -161,7 +161,7 @@ def create_conversation(**fields) -> dict:
     conversation_id = fields.get("id") or new_id("conv_")
     record = {
         "id": conversation_id,
-        "title": (fields.get("title") or "").strip() or "Nouveau chat",
+        "title": (fields.get("title") or "").strip() or "New chat",
         "created_at": now,
         "updated_at": now,
         "provider": fields.get("provider") or defaults["provider"],

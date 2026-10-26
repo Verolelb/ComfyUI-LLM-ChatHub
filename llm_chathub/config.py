@@ -20,8 +20,8 @@ COMFY_ROOT = os.path.dirname(os.path.dirname(NODE_DIR))
 _LOCK = threading.RLock()
 
 DEFAULT_SYSTEM_PROMPT = (
-    "Tu es un assistant utile, precis et concis. "
-    "Tu reponds dans la langue de l'utilisateur et tu suis ses consignes."
+    "You are a helpful, precise and concise assistant. "
+    "You answer in the user's language and follow their instructions."
 )
 
 # --------------------------------------------------------------------------- providers
@@ -31,19 +31,19 @@ PROVIDER_DEFAULTS = {
         "label": "LM Studio (local)",
         "base_url": "http://127.0.0.1:1234/v1",
         "needs_key": False,
-        "hint": "Dans LM Studio : onglet Developer -> Start Server.",
+        "hint": "In LM Studio: Developer tab -> Start Server.",
     },
     "ollama": {
         "label": "Ollama (local)",
         "base_url": "http://127.0.0.1:11434",
         "needs_key": False,
-        "hint": "Lance `ollama serve` puis `ollama pull <modele>`.",
+        "hint": "Run `ollama serve`, then `ollama pull <model>`.",
     },
     "ollama_cloud": {
         "label": "Ollama Cloud",
         "base_url": "https://ollama.com",
         "needs_key": True,
-        "hint": "Cle API sur https://ollama.com/settings/keys",
+        "hint": "API key at https://ollama.com/settings/keys",
     },
 }
 

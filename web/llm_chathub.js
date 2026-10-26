@@ -10,7 +10,7 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 
 const BASE = "/llm_chathub";
-const USE_PANEL = "panel (reglages enregistres)";
+const USE_PANEL = "panel (saved settings)";
 
 const PROVIDERS = [
   { value: "lmstudio", label: "LM Studio (local)" },
@@ -18,7 +18,7 @@ const PROVIDERS = [
   { value: "ollama_cloud", label: "Ollama Cloud" },
 ];
 
-/** Extensions acceptees par l'import RAG (cote serveur: rag.TEXT_EXTENSIONS). */
+/** Extensions accepted by the RAG import (server side: rag.TEXT_EXTENSIONS). */
 const TEXT_ACCEPT = ".txt,.md,.markdown,.rst,.log,.csv,.tsv,.json,.yaml,.yml,.ini,.toml,.cfg,.conf,.env,.py,.js,.mjs,.ts,.html,.css,.xml,.srt,.vtt,.sql,.sh,.bat,.ps1,.c,.h,.cpp,.cs,.java,.go,.rs,.lua,.php,.rb,.kt,.swift,.prompt,.caption";
 
 const state = {
@@ -68,9 +68,9 @@ function escapeHtml(text) {
 
 function formatSize(bytes) {
   const value = Number(bytes) || 0;
-  if (value < 1024) return `${value} o`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} Ko`;
-  return `${(value / (1024 * 1024)).toFixed(1)} Mo`;
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function readFileBase64(file) {
@@ -81,7 +81,7 @@ function readFileBase64(file) {
       const comma = result.indexOf(",");
       resolve(comma >= 0 ? result.slice(comma + 1) : result);
     };
-    reader.onerror = () => reject(new Error(`Lecture impossible: ${file.name}`));
+    reader.onerror = () => reject(new Error(`Could not read: ${file.name}`));
     reader.readAsDataURL(file);
   });
 }
@@ -314,30 +314,30 @@ function messageActions(message) {
   const actions = [];
   if (message.content) {
     actions.push(el("button", {
-      class: "llmch-btn", text: "Copier",
+      class: "llmch-btn", text: "Copy",
       onclick: () => navigator.clipboard?.writeText(message.content),
     }));
   }
   if (message.role === "user") {
     actions.push(el("button", {
-      class: "llmch-btn", text: "Modifier",
+      class: "llmch-btn", text: "Edit",
       onclick: () => startEdit(message),
     }));
   }
   if (message.role === "assistant") {
     actions.push(el("button", {
-      class: "llmch-btn", text: "Regenerer",
+      class: "llmch-btn", text: "Regenerate",
       disabled: state.streaming,
       onclick: () => regenerate(message.id),
     }));
   }
   actions.push(el("button", {
-    class: "llmch-btn", text: "Supprimer",
+    class: "llmch-btn", text: "Delete",
     onclick: () => deleteMessage(message, false),
   }));
   actions.push(el("button", {
-    class: "llmch-btn danger", text: "Tronquer ici",
-    title: "Supprime ce message et tout ce qui suit",
+    class: "llmch-btn danger", text: "Truncate here",
+    title: "Deletes this message and everything after it",
     onclick: () => deleteMessage(message, true),
   }));
   return el("div", { class: "llmch-msg-actions" }, actions);
@@ -346,8 +346,8 @@ function messageActions(message) {
 function messageNode(message) {
   const rag = (message.meta?.rag || []).filter(Boolean);
   const head = el("div", { class: "llmch-msg-head" }, [
-    el("strong", { text: message.role === "user" ? "Vous" : message.role === "assistant" ? "Assistant" : message.role }),
-    message.edited ? el("span", { text: "• modifie" }) : null,
+    el("strong", { text: message.role === "user" ? "You" : message.role === "assistant" ? "Assistant" : message.role }),
+    message.edited ? el("span", { text: "• edited" }) : null,
     message.meta?.model ? el("span", { text: `• ${message.meta.model}` }) : null,
     message.meta?.seconds ? el("span", { text: `• ${message.meta.seconds}s` }) : null,
     rag.length ? el("span", { class: "llmch-badge", text: `RAG: ${rag.join(", ")}` }) : null,
@@ -358,13 +358,13 @@ function messageNode(message) {
     class: "llmch-msg-body",
     id: message.id ? `edit-${message.id}` : null,
     html: renderMarkdown(message.content) ||
-      (reasoning ? '<span class="llmch-note">Le modele a raisonne sans repondre : augmente "Max tokens".</span>'
-                 : empty && message.role === "assistant" ? '<span class="llmch-note">(reponse vide)</span>' : ""),
+      (reasoning ? '<span class="llmch-note">The model reasoned without replying: raise "Max tokens".</span>'
+                 : empty && message.role === "assistant" ? '<span class="llmch-note">(empty reply)</span>' : ""),
   });
   const images = messageImages(message);
   const thinking = reasoning
     ? el("details", { class: "llmch-reasoning" }, [
-        el("summary", { text: "Reflexion du modele" }),
+        el("summary", { text: "Model reasoning" }),
         el("div", { class: "llmch-think", text: reasoning }),
       ])
     : null;
@@ -382,7 +382,7 @@ async function startEdit(message) {
     textarea,
     el("div", { class: "llmch-row" }, [
       el("button", {
-        class: "llmch-btn primary", text: "Enregistrer + renvoyer",
+        class: "llmch-btn primary", text: "Save + resend",
         onclick: async () => {
           await postJSON(`${BASE}/messages/edit`, {
             conversation_id: state.conversation.id,
@@ -394,7 +394,7 @@ async function startEdit(message) {
         },
       }),
       el("button", {
-        class: "llmch-btn", text: "Enregistrer",
+        class: "llmch-btn", text: "Save",
         onclick: async () => {
           await postJSON(`${BASE}/messages/edit`, {
             conversation_id: state.conversation.id,
@@ -404,14 +404,14 @@ async function startEdit(message) {
           await reloadMessages();
         },
       }),
-      el("button", { class: "llmch-btn", text: "Annuler", onclick: () => renderMessages() }),
+      el("button", { class: "llmch-btn", text: "Cancel", onclick: () => renderMessages() }),
     ]),
   ]);
   holder.replaceWith(box);
 }
 
 async function deleteMessage(message, fromHere) {
-  if (!confirm(fromHere ? "Supprimer ce message et tout ce qui suit ?" : "Supprimer ce message ?")) return;
+  if (!confirm(fromHere ? "Delete this message and everything after it?" : "Delete this message?")) return;
   const data = await postJSON(`${BASE}/messages/delete`, {
     conversation_id: state.conversation.id,
     message_id: message.id,
@@ -439,7 +439,7 @@ function renderStreamingBubble(text, reasoning) {
     bubble = el("div", { class: "llmch-msg assistant llmch-streaming" }, [
       el("div", { class: "llmch-msg-head" }, [el("strong", { text: "Assistant" })]),
       el("details", { class: "llmch-reasoning", style: "display:none" }, [
-        el("summary", { text: "Reflexion du modele" }),
+        el("summary", { text: "Model reasoning" }),
         el("div", { class: "llmch-think" }),
       ]),
       el("div", { class: "llmch-msg-body llmch-caret" }),
@@ -452,7 +452,7 @@ function renderStreamingBubble(text, reasoning) {
     holder.querySelector(".llmch-think").textContent = reasoning;
   }
   bubble.querySelector(".llmch-msg-body").innerHTML =
-    renderMarkdown(text) || (reasoning ? '<span class="llmch-note">raisonnement en cours...</span>' : "");
+    renderMarkdown(text) || (reasoning ? '<span class="llmch-note">reasoning in progress...</span>' : "");
   container.scrollTop = container.scrollHeight;
 }
 
@@ -467,7 +467,7 @@ async function sendMessage() {
   state.pending = [];
   state.draft = "";
   renderControls();
-  setStatus("Envoi en cours...");
+  setStatus("Sending...");
   state.streaming = true;
   state.controller = new AbortController();
   renderControls();
@@ -485,9 +485,9 @@ async function sendMessage() {
       onResult: (result) => {
         if (result.error && !result.reply) setStatus(result.error, true);
         else if (!result.reply && result.reasoning) {
-          setStatus("Le modele a raisonne sans repondre: augmente \"Max tokens\" dans les reglages.", true);
+          setStatus("The model reasoned without replying: raise \"Max tokens\" in the settings.", true);
         } else {
-          setStatus(result.rag?.length ? `Reponse recue (RAG: ${result.rag.length} extrait(s))` : "Reponse recue");
+          setStatus(result.rag?.length ? `Reply received (RAG: ${result.rag.length} excerpt(s))` : "Reply received");
         }
       },
       onError: (message) => setStatus(message, true),
@@ -509,7 +509,7 @@ async function regenerate(messageId) {
   state.streaming = true;
   state.controller = new AbortController();
   renderControls();
-  setStatus("Regeneration...");
+  setStatus("Regenerating...");
   let streamed = "";
   let reasoned = "";
   try {
@@ -534,14 +534,14 @@ async function regenerate(messageId) {
 async function stopStreaming() {
   state.controller?.abort();
   try { await postJSON(`${BASE}/cancel`, { conversation_id: state.conversation?.id }); } catch { /* ignored */ }
-  setStatus("Interrompu");
+  setStatus("Stopped");
 }
 
 /* ------------------------------------------------------------------ composer */
 
 function renderComposer() {
   const textarea = el("textarea", {
-    class: "llmch-textarea", placeholder: "Ecris ton message... (Entree = envoyer, Maj+Entree = nouvelle ligne)",
+    class: "llmch-textarea", placeholder: "Write your message... (Enter = send, Shift+Enter = new line)",
     rows: 3,
   });
   textarea.value = state.draft || "";
@@ -574,14 +574,14 @@ function renderComposer() {
   const thumbs = state.pending.length
     ? el("div", { class: "llmch-thumbs" }, state.pending.map((item, index) =>
         el("img", {
-          src: item.dataUrl, title: `${item.name} (clique pour retirer)`,
+          src: item.dataUrl, title: `${item.name} (click to remove)`,
           onclick: () => { state.pending.splice(index, 1); renderComposer(); },
         })))
     : null;
 
   const sendButton = state.streaming
     ? el("button", { class: "llmch-btn danger", text: "Stop", onclick: stopStreaming })
-    : el("button", { class: "llmch-btn primary", text: "Envoyer", onclick: sendMessage });
+    : el("button", { class: "llmch-btn primary", text: "Send", onclick: sendMessage });
 
   return el("div", { class: "llmch-composer llmch-section" }, [
     thumbs,
@@ -590,10 +590,10 @@ function renderComposer() {
       el("button", { class: "llmch-btn", text: "Image", onclick: () => fileInput.click() }),
       fileInput,
       el("button", {
-        class: "llmch-btn", text: "Effacer le chat",
+        class: "llmch-btn", text: "Clear chat",
         onclick: async () => {
           if (!state.conversation) return;
-          if (!confirm("Vider l'historique de cette conversation ?")) return;
+          if (!confirm("Clear the history of this conversation?")) return;
           await postJSON(`${BASE}/messages/truncate`, { conversation_id: state.conversation.id, keep: 0 });
           await reloadMessages();
         },
@@ -610,7 +610,7 @@ function renderHeader() {
   const picker = el("select", { class: "llmch-select llmch-grow" }, state.conversations.map((conversation) =>
     el("option", {
       value: conversation.id,
-      text: `${conversation.title || "Sans titre"} (${conversation.message_count || 0})`,
+      text: `${conversation.title || "Untitled"} (${conversation.message_count || 0})`,
       selected: state.conversation?.id === conversation.id,
     })));
   picker.addEventListener("change", async () => {
@@ -619,40 +619,40 @@ function renderHeader() {
   });
 
   const provider = PROVIDERS.find((item) => item.value === state.conversation?.provider);
-  const model = state.conversation?.model || "(modele non choisi)";
+  const model = state.conversation?.model || "(no model selected)";
   const info = state.settings?.providers?.[state.conversation?.provider] || {};
 
   const ragButton = el("button", {
     class: `llmch-chip ${state.conversation?.rag_enabled ? "on" : ""}`,
-    text: state.conversation?.rag_enabled ? "RAG actif" : "RAG off",
-    title: "Active l'injection des extraits de documents pour cette conversation",
+    text: state.conversation?.rag_enabled ? "RAG on" : "RAG off",
+    title: "Inject document excerpts into every turn of this conversation",
     disabled: !state.conversation,
     onclick: async (event) => {
       const button = event.currentTarget;
       await patchConversation({ rag_enabled: !state.conversation.rag_enabled });
       const active = Boolean(state.conversation.rag_enabled);
-      button.textContent = active ? "RAG actif" : "RAG off";
+      button.textContent = active ? "RAG on" : "RAG off";
       button.className = `llmch-chip ${active ? "on" : ""}`;
-      setStatus(active ? "RAG active pour cette conversation." : "RAG desactive.");
+      setStatus(active ? "RAG enabled for this conversation." : "RAG disabled.");
     },
   });
 
   const stats = state.index || {};
   const indexChip = el("span", {
     class: "llmch-chip",
-    text: `index: ${stats.documents || 0} doc / ${stats.chunks || 0} extraits`,
-    title: stats.folder ? `Dernier dossier: ${stats.folder}` : "Aucun document indexe",
+    text: `index: ${stats.documents || 0} docs / ${stats.chunks || 0} excerpts`,
+    title: stats.folder ? `Last folder: ${stats.folder}` : "No indexed document",
   });
 
   return el("div", { class: "llmch-section" }, [
     el("div", { class: "llmch-row" }, [
       picker,
-      el("button", { class: "llmch-btn", text: "+ Nouveau", onclick: async () => { await newConversation(); renderAll(); } }),
+      el("button", { class: "llmch-btn", text: "+ New", onclick: async () => { await newConversation(); renderAll(); } }),
       el("button", {
-        class: "llmch-btn", text: "Renommer",
+        class: "llmch-btn", text: "Rename",
         disabled: !state.conversation,
         onclick: async () => {
-          const title = prompt("Nouveau titre", state.conversation?.title || "");
+          const title = prompt("New title", state.conversation?.title || "");
           if (title === null) return;
           await patchConversation({ title });
           await refreshState();
@@ -660,11 +660,11 @@ function renderHeader() {
         },
       }),
       el("button", {
-        class: "llmch-btn danger", text: "Suppr.",
+        class: "llmch-btn danger", text: "Delete",
         disabled: !state.conversation,
-        title: "Supprimer la conversation",
+        title: "Delete the conversation",
         onclick: async () => {
-          if (!confirm("Supprimer definitivement cette conversation ?")) return;
+          if (!confirm("Delete this conversation permanently?")) return;
           await postJSON(`${BASE}/conversation/delete`, { id: state.conversation.id });
           state.conversation = null;
           state.messages = [];
@@ -674,7 +674,7 @@ function renderHeader() {
         },
       }),
       el("button", {
-        class: "llmch-btn", text: state.showPanel ? "Masquer reglages" : "Reglages",
+        class: "llmch-btn", text: state.showPanel ? "Hide settings" : "Settings",
         onclick: () => { state.showPanel = !state.showPanel; renderAll(); },
       }),
     ]),
@@ -699,23 +699,23 @@ function settingsPanel() {
     el("option", { value: item.value, text: item.label, selected: item.value === activeProvider })));
 
   const providerInfo = settings.providers?.[activeProvider] || {};
-  const baseUrl = el("input", { class: "llmch-input", placeholder: "URL de base", value: providerInfo.base_url || "" });
-  const model = el("input", { class: "llmch-input", placeholder: "modele", value: conversation?.model || providerInfo.model || "" });
-  const apiKey = el("input", { class: "llmch-input", type: "password", placeholder: providerInfo.has_key ? "(cle enregistree)" : "cle API (Ollama Cloud)" });
+  const baseUrl = el("input", { class: "llmch-input", placeholder: "Base URL", value: providerInfo.base_url || "" });
+  const model = el("input", { class: "llmch-input", placeholder: "model", value: conversation?.model || providerInfo.model || "" });
+  const apiKey = el("input", { class: "llmch-input", type: "password", placeholder: providerInfo.has_key ? "(key saved)" : "API key (Ollama Cloud)" });
   const modelList = el("select", { class: "llmch-select", style: "display:none" });
 
   const temperature = el("input", { class: "llmch-input", type: "number", step: "0.05", min: "0", max: "2", value: conversation?.temperature ?? settings.chat?.temperature ?? 0.7 });
   const maxTokens = el("input", { class: "llmch-input", type: "number", min: "16", max: "131072", value: conversation?.max_tokens ?? settings.chat?.max_tokens ?? 1024 });
   const historyLimit = el("input", { class: "llmch-input", type: "number", min: "0", max: "200", value: conversation?.history_limit ?? settings.chat?.history_limit ?? 20 });
 
-  const systemPrompt = el("textarea", { class: "llmch-textarea", rows: 4, placeholder: "Prompt de depart / instructions systeme" });
+  const systemPrompt = el("textarea", { class: "llmch-textarea", rows: 4, placeholder: "Starting prompt / system instructions" });
   systemPrompt.value = conversation?.system_prompt || settings.chat?.system_prompt || "";
-  const reference = el("textarea", { class: "llmch-textarea", rows: 3, placeholder: "Contexte de reference toujours inclus (texte libre)" });
+  const reference = el("textarea", { class: "llmch-textarea", rows: 3, placeholder: "Reference context, always included (free text)" });
   reference.value = conversation?.reference || "";
 
-  const ragFolder = el("input", { class: "llmch-input", placeholder: "Dossier de documents a indexer", value: conversation?.rag_folder || settings.rag?.folder || "" });
+  const ragFolder = el("input", { class: "llmch-input", placeholder: "Folder of documents to index", value: conversation?.rag_folder || settings.rag?.folder || "" });
   const ragTopK = el("input", { class: "llmch-input", type: "number", min: "1", max: "20", value: conversation?.rag_top_k ?? settings.rag?.top_k ?? 4 });
-  const embedModel = el("input", { class: "llmch-input", placeholder: "modele d'embedding (vide = modele de chat)", value: settings.rag?.embed_model || "" });
+  const embedModel = el("input", { class: "llmch-input", placeholder: "embedding model (empty = chat model)", value: settings.rag?.embed_model || "" });
 
   providerSelect.addEventListener("change", () => {
     const info = settings.providers?.[providerSelect.value] || {};
@@ -724,9 +724,9 @@ function settingsPanel() {
   });
 
   const loadModels = el("button", {
-    class: "llmch-btn", text: "Charger les modeles",
+    class: "llmch-btn", text: "Load models",
     onclick: async () => {
-      setStatus("Recuperation des modeles...");
+      setStatus("Fetching models...");
       try {
         const data = await postJSON(`${BASE}/models`, {
           provider: providerSelect.value,
@@ -734,12 +734,12 @@ function settingsPanel() {
           api_key: apiKey.value,
         });
         const models = data.models || [];
-        if (!models.length) { setStatus("Aucun modele renvoye par le serveur.", true); return; }
+        if (!models.length) { setStatus("The server returned no model.", true); return; }
         modelList.replaceChildren(...models.map((name) =>
           el("option", { value: name, text: name, selected: name === model.value })));
         modelList.style.display = "block";
         modelList.onchange = () => { model.value = modelList.value; };
-        setStatus(`${models.length} modele(s) disponible(s).`);
+        setStatus(`${models.length} model(s) available.`);
       } catch (error) {
         setStatus(String(error.message || error), true);
       }
@@ -747,14 +747,14 @@ function settingsPanel() {
   });
 
   const testConnection = el("button", {
-    class: "llmch-btn", text: "Tester la connexion",
+    class: "llmch-btn", text: "Test connection",
     onclick: async () => {
-      setStatus("Test en cours...");
+      setStatus("Testing...");
       try {
         const data = await postJSON(`${BASE}/models`, {
           provider: providerSelect.value, base_url: baseUrl.value, api_key: apiKey.value,
         });
-        setStatus(`OK - ${data.models.length} modele(s) sur ${providerSelect.value}.`);
+        setStatus(`OK - ${data.models.length} model(s) on ${providerSelect.value}.`);
       } catch (error) {
         setStatus(String(error.message || error), true);
       }
@@ -762,9 +762,9 @@ function settingsPanel() {
   });
 
   const saveConnection = el("button", {
-    class: "llmch-btn primary", text: "Enregistrer",
+    class: "llmch-btn primary", text: "Save",
     onclick: async () => {
-      setStatus("Enregistrement...");
+      setStatus("Saving...");
       try {
         const patch = {
           active_provider: providerSelect.value,
@@ -804,7 +804,7 @@ function settingsPanel() {
           });
         }
         apiKey.value = "";
-        setStatus(`Reglages enregistres pour ${providerSelect.value}.`);
+        setStatus(`Settings saved for ${providerSelect.value}.`);
         renderAll();
       } catch (error) {
         setStatus(String(error.message || error), true);
@@ -814,8 +814,8 @@ function settingsPanel() {
 
   async function runIndex() {
     const folder = ragFolder.value.trim();
-    if (!folder) { setStatus("Ajoute un document ou indique un dossier a indexer.", true); return; }
-    setStatus("Indexation...");
+    if (!folder) { setStatus("Add a document or set a folder to index.", true); return; }
+    setStatus("Indexing...");
     try {
       await streamRequest(`${BASE}/rag/index`, {
         folder,
@@ -826,8 +826,8 @@ function settingsPanel() {
         onProgress: (progress) => setStatus(`${progress.stage}: ${progress.done}/${progress.total} - ${progress.message}`),
         onResult: (summary) => {
           setStatus(
-            `Index termine: ${summary.documents} document(s), ${summary.chunks} extrait(s)` +
-            (summary.embedding_warning ? `\nEmbeddings indisponibles, repli mots-cles: ${summary.embedding_warning}` : ""),
+            `Index complete: ${summary.documents} document(s), ${summary.chunks} excerpt(s)` +
+            (summary.embedding_warning ? `\nEmbeddings unavailable, keyword fallback: ${summary.embedding_warning}` : ""),
             Boolean(summary.embedding_warning),
           );
           state.index = summary.stats || state.index;
@@ -841,7 +841,7 @@ function settingsPanel() {
     }
   }
 
-  const indexButton = el("button", { class: "llmch-btn", text: "Indexer les documents", onclick: () => runIndex() });
+  const indexButton = el("button", { class: "llmch-btn", text: "Index documents", onclick: () => runIndex() });
 
   const filePicker = el("input", {
     type: "file",
@@ -854,13 +854,13 @@ function settingsPanel() {
   function renderFileList() {
     const files = state.documents || [];
     if (!files.length) {
-      fileList.replaceChildren(el("div", { class: "llmch-label", text: "Aucun document importe." }));
+      fileList.replaceChildren(el("div", { class: "llmch-label", text: "No document imported." }));
       return;
     }
     fileList.replaceChildren(...files.map((file) => el("div", { class: "llmch-file" }, [
       el("span", { class: "llmch-file-name", text: file.name, title: file.name }),
       el("span", { class: "llmch-file-size", text: formatSize(file.size) }),
-      el("button", { class: "llmch-btn danger", text: "x", title: `Retirer ${file.name}`, onclick: () => removeFile(file.name) }),
+      el("button", { class: "llmch-btn danger", text: "x", title: `Remove ${file.name}`, onclick: () => removeFile(file.name) }),
     ])));
   }
 
@@ -879,7 +879,7 @@ function settingsPanel() {
       const data = await postJSON(`${BASE}/rag/files/delete`, { name });
       state.documents = data.files || [];
       renderFileList();
-      setStatus(`${name} retire du dossier. Reindexe pour mettre l'index a jour.`);
+      setStatus(`${name} removed from the folder. Reindex to refresh the index.`);
     } catch (error) {
       setStatus(String(error.message || error), true);
     }
@@ -887,7 +887,7 @@ function settingsPanel() {
 
   async function uploadDocuments(files) {
     if (!files.length) return;
-    setStatus(`Import de ${files.length} fichier(s)...`);
+    setStatus(`Importing ${files.length} file(s)...`);
     try {
       const payload = [];
       for (const file of files) payload.push({ name: file.name, data: await readFileBase64(file) });
@@ -898,9 +898,9 @@ function settingsPanel() {
       await postJSON(`${BASE}/settings`, { rag: { folder: ragFolder.value.trim() } });
       if (state.conversation) await patchConversation({ rag_folder: ragFolder.value.trim() });
       if ((data.skipped || []).length) {
-        setStatus(`Importes: ${(data.saved || []).join(", ")}\nIgnores: ${data.skipped.join(", ")}`, true);
+        setStatus(`Imported: ${(data.saved || []).join(", ")}\nSkipped: ${data.skipped.join(", ")}`, true);
       } else {
-        setStatus(`${(data.saved || []).length} document(s) importe(s). Indexation...`);
+        setStatus(`${(data.saved || []).length} document(s) imported. Indexing...`);
       }
       await runIndex();
     } catch (error) {
@@ -915,9 +915,9 @@ function settingsPanel() {
   });
 
   const clearIndex = el("button", {
-    class: "llmch-btn danger", text: "Vider l'index",
+    class: "llmch-btn danger", text: "Clear index",
     onclick: async () => {
-      if (!confirm("Supprimer tout l'index de documents ?")) return;
+      if (!confirm("Delete the whole document index?")) return;
       const data = await postJSON(`${BASE}/rag/clear`, {});
       state.index = data.index || state.index;
       renderAll();
@@ -925,15 +925,15 @@ function settingsPanel() {
   });
 
   const testRag = el("button", {
-    class: "llmch-btn", text: "Tester le RAG",
+    class: "llmch-btn", text: "Test RAG",
     onclick: async () => {
-      const query = prompt("Requete de test RAG", "resume du document");
+      const query = prompt("RAG test query", "document summary");
       if (!query) return;
       try {
         const data = await postJSON(`${BASE}/rag/test`, { query, provider: providerSelect.value });
         const lines = (data.results || []).map((result) =>
           `${(result.source || "").split(/[\\/]/).pop()} (${result.score}, ${result.mode}): ${result.text.slice(0, 140)}...`);
-        setStatus(lines.length ? lines.join("\n\n") : "Aucun extrait pertinent.");
+        setStatus(lines.length ? lines.join("\n\n") : "No relevant excerpt.");
       } catch (error) {
         setStatus(String(error.message || error), true);
       }
@@ -942,7 +942,7 @@ function settingsPanel() {
 
   const panel = el("div", { class: "llmch-panel" }, [
     el("div", { class: "llmch-section" }, [
-      el("div", { class: "llmch-label", text: "Connexion (globale)" }),
+      el("div", { class: "llmch-label", text: "Connection (global)" }),
       providerSelect,
       baseUrl,
       el("div", { class: "llmch-row" }, [model, loadModels]),
@@ -951,33 +951,33 @@ function settingsPanel() {
       el("div", { class: "llmch-row" }, [
         el("label", { class: "llmch-grow" }, [el("div", { class: "llmch-label", text: "Temperature" }), temperature]),
         el("label", { class: "llmch-grow" }, [el("div", { class: "llmch-label", text: "Max tokens" }), maxTokens]),
-        el("label", { class: "llmch-grow" }, [el("div", { class: "llmch-label", text: "Tours d'historique" }), historyLimit]),
+        el("label", { class: "llmch-grow" }, [el("div", { class: "llmch-label", text: "History turns" }), historyLimit]),
       ]),
       el("div", { class: "llmch-row" }, [testConnection, saveConnection]),
     ]),
     el("div", { class: "llmch-section" }, [
-      el("div", { class: "llmch-label", text: "Prompt de depart (conversation)" }),
+      el("div", { class: "llmch-label", text: "Starting prompt (conversation)" }),
       systemPrompt,
-      el("div", { class: "llmch-label", text: "Contexte de reference" }),
+      el("div", { class: "llmch-label", text: "Reference context" }),
       reference,
     ]),
     el("div", { class: "llmch-section" }, [
-      el("div", { class: "llmch-label", text: "RAG documents (texte, markdown, code...)" }),
+      el("div", { class: "llmch-label", text: "RAG documents (text, markdown, code...)" }),
       el("div", { class: "llmch-row" }, [
-        el("button", { class: "llmch-btn primary", text: "Ajouter des documents", onclick: () => filePicker.click() }),
+        el("button", { class: "llmch-btn primary", text: "Add documents", onclick: () => filePicker.click() }),
         filePicker,
       ]),
       fileList,
       ragFolder,
       el("div", { class: "llmch-row" }, [
-        el("label", { class: "llmch-grow" }, [el("div", { class: "llmch-label", text: "Extraits (top-k)" }), ragTopK]),
-        el("label", { class: "llmch-grow" }, [el("div", { class: "llmch-label", text: "Modele embedding" }), embedModel]),
+        el("label", { class: "llmch-grow" }, [el("div", { class: "llmch-label", text: "Excerpts (top-k)" }), ragTopK]),
+        el("label", { class: "llmch-grow" }, [el("div", { class: "llmch-label", text: "Embedding model" }), embedModel]),
       ]),
       el("div", { class: "llmch-row" }, [indexButton, testRag, clearIndex]),
       el("div", {
         class: "llmch-label",
-        text: `Indexe: ${state.index?.documents || 0} document(s), ${state.index?.chunks || 0} extrait(s), ` +
-          `${state.index?.embedded || 0} avec embeddings`,
+        text: `Indexed: ${state.index?.documents || 0} document(s), ${state.index?.chunks || 0} excerpt(s), ` +
+          `${state.index?.embedded || 0} with embeddings`,
       }),
     ]),
   ]);
@@ -1005,7 +1005,7 @@ function renderMessages() {
   if (!state.messages.length) {
     container.replaceChildren(el("div", {
       class: "llmch-empty",
-      text: "Aucun message. Ecris ton prompt de depart, attache une image si besoin, et envoie.",
+      text: "No message yet. Write your starting prompt, attach an image if needed, and send.",
     }));
     return;
   }
@@ -1037,7 +1037,7 @@ function renderAll() {
 async function mount(target) {
   injectCss();
   rootEl = el("div", { class: "llmch-root" });
-  rootEl.replaceChildren(el("div", { class: "llmch-empty", text: "Chargement du ChatHub..." }));
+  rootEl.replaceChildren(el("div", { class: "llmch-empty", text: "Loading ChatHub..." }));
   target.append(rootEl);
   try {
     const data = await refreshState();
@@ -1046,9 +1046,9 @@ async function mount(target) {
     if (first) await openConversation(first.id);
     else await newConversation();
     renderAll();
-    setStatus("Pret.");
+    setStatus("Ready.");
   } catch (error) {
-    rootEl.replaceChildren(el("div", { class: "llmch-empty", text: `ChatHub indisponible: ${error.message}` }));
+    rootEl.replaceChildren(el("div", { class: "llmch-empty", text: `ChatHub unavailable: ${error.message}` }));
   }
 }
 
@@ -1061,11 +1061,11 @@ function notify(summary, detail = "", severity = "success") {
       toast.add({ severity, summary, detail, life: severity === "error" ? 8000 : 5000 });
       return;
     }
-  } catch { /* pas de toast dans cette version */ }
+  } catch { /* no toast API in this version */ }
   console.log(`[LLM ChatHub] ${summary}${detail ? ` - ${detail}` : ""}`);
 }
 
-/** Ecrit une valeur dans un widget en gardant l'affichage ComfyUI synchronise. */
+/** Write a value into a widget while keeping ComfyUI's screen value in sync. */
 function setWidgetValue(node, widget, value) {
   if (!widget) return false;
   widget.value = value;
@@ -1074,7 +1074,7 @@ function setWidgetValue(node, widget, value) {
     if (element.type === "checkbox") element.checked = Boolean(value);
     else if ("value" in element) element.value = value;
   }
-  try { widget.callback?.(value); } catch { /* callback utilisateur */ }
+  try { widget.callback?.(value); } catch { /* user callback */ }
   try { node.setDirtyCanvas?.(true, true); } catch { /* noop */ }
   return true;
 }
@@ -1085,7 +1085,7 @@ function attachRagUpload(node) {
   if (!folderWidget) return;
   node.__llmchRagUpload = true;
 
-  const label = "RAG upload (fichiers)";
+  const label = "RAG upload (files)";
   const picker = document.createElement("input");
   picker.type = "file";
   picker.multiple = true;
@@ -1119,14 +1119,14 @@ function attachRagUpload(node) {
       const saved = uploaded.saved || [];
       const skipped = uploaded.skipped || [];
       if (!saved.length) {
-        notify("RAG: aucun fichier importe", skipped.join(", ") || "format non supporte", "error");
+        notify("RAG: no file imported", skipped.join(", ") || "unsupported format", "error");
         return;
       }
 
       setWidgetValue(node, folderWidget, uploaded.folder || "");
       setWidgetValue(node, node.widgets.find((widget) => widget.name === "rag_enabled"), true);
 
-      setLabel("RAG: indexation...");
+      setLabel("RAG: indexing...");
       let failure = "";
       let summary = null;
       await streamRequest(`${BASE}/rag/index`, { folder: uploaded.folder || folderWidget.value }, {
@@ -1136,15 +1136,15 @@ function attachRagUpload(node) {
       });
 
       if (failure || !summary) {
-        notify("RAG: indexation echouee", failure || "aucun resultat", "error");
+        notify("RAG: indexing failed", failure || "no result", "error");
         return;
       }
-      const detail = `${summary.documents} document(s), ${summary.chunks} extrait(s)` +
-        (summary.embedding_warning ? ` - embeddings indisponibles: ${summary.embedding_warning}` : "");
-      notify("RAG indexe", detail, summary.embedding_warning ? "warn" : "success");
-      if (skipped.length) notify("RAG: fichiers ignores", skipped.join(", "), "warn");
+      const detail = `${summary.documents} document(s), ${summary.chunks} excerpt(s)` +
+        (summary.embedding_warning ? ` - embeddings unavailable: ${summary.embedding_warning}` : "");
+      notify("RAG indexed", detail, summary.embedding_warning ? "warn" : "success");
+      if (skipped.length) notify("RAG: skipped files", skipped.join(", "), "warn");
     } catch (error) {
-      notify("RAG: erreur", String(error?.message || error), "error");
+      notify("RAG: error", String(error?.message || error), "error");
     } finally {
       setLabel(label);
     }
@@ -1161,7 +1161,7 @@ app.registerExtension({
       try {
         attachRagUpload(this);
       } catch (error) {
-        console.warn("[LLM ChatHub] bouton RAG upload indisponible", error);
+        console.warn("[LLM ChatHub] RAG upload button unavailable", error);
       }
       return result;
     };
@@ -1177,7 +1177,7 @@ app.registerExtension({
       title: "ChatHub",
       icon: "pi pi-comments",
       type: "custom",
-      tooltip: "Chat avec LM Studio / Ollama (historique, images, RAG)",
+      tooltip: "Chat with LM Studio / Ollama (history, images, RAG)",
       render: (element) => {
         element.style.height = "100%";
         element.style.width = "100%";
@@ -1187,7 +1187,7 @@ app.registerExtension({
     try {
       app.extensionManager.registerSidebarTab(tab);
     } catch (error) {
-      console.warn("[LLM ChatHub] sidebar indisponible, bascule en fenetre flottante", error);
+      console.warn("[LLM ChatHub] sidebar unavailable, falling back to a floating window", error);
       const overlay = el("div", { class: "llmch-overlay" });
       document.body.append(overlay);
       mount(overlay);

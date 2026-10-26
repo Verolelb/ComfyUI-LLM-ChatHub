@@ -130,7 +130,7 @@ def chunk_text(text: str, size: int = 1200, overlap: int = 200) -> list[str]:
 def iter_files(folder: str, max_file_mb: float = 8.0) -> list[str]:
     folder = os.path.abspath(os.path.expanduser(folder))
     if not os.path.isdir(folder):
-        raise FileNotFoundError(f"Dossier introuvable: {folder}")
+        raise FileNotFoundError(f"Folder not found: {folder}")
     max_bytes = int(max_file_mb * 1024 * 1024)
     found: list[str] = []
     for root, dirs, files in os.walk(folder):
@@ -177,7 +177,7 @@ def index_folder(
     files = iter_files(folder, max_file_mb)
     if replace:
         store.clear_index()
-    report("scan", 0, len(files), f"{len(files)} fichier(s) texte trouve(s)")
+    report("scan", 0, len(files), f"{len(files)} text file(s) found")
 
     embedding_ok = bool(embed_model)
     embedding_warning = ""
@@ -189,7 +189,7 @@ def index_folder(
         text = read_document(path)
         if not text or len(text) < 20:
             skipped.append(os.path.basename(path))
-            report("index", position, len(files), f"ignore: {os.path.basename(path)}")
+            report("index", position, len(files), f"skipped: {os.path.basename(path)}")
             continue
 
         raw_chunks = chunk_text(text, chunk_size, overlap)
@@ -231,10 +231,10 @@ def index_folder(
         store.add_chunks(document["id"], records)
         indexed_docs += 1
         total_chunks += len(records)
-        report("index", position, len(files), f"indexe: {os.path.basename(path)}")
+        report("index", position, len(files), f"indexed: {os.path.basename(path)}")
 
     stats = store.index_stats()
-    report("done", len(files), len(files), f"{total_chunks} extrait(s) prets")
+    report("done", len(files), len(files), f"{total_chunks} excerpt(s) ready")
     return {
         "folder": folder,
         "documents": indexed_docs,
@@ -341,10 +341,10 @@ def retrieve(
             0.75 * score + 0.25 * keyword_normalized[index]
             for index, score in enumerate(vector_scores)
         ]
-        mode = "hybride"
+        mode = "hybrid"
     else:
         combined = keyword_scores
-        mode = "mots-cles"
+        mode = "keywords"
 
     ranked = sorted(range(len(rows)), key=lambda index: combined[index], reverse=True)
     results = []

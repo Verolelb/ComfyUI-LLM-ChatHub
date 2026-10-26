@@ -16,6 +16,11 @@ ou **Ollama Cloud**, avec :
 Aucune dépendance à installer : tout est déjà présent dans ComfyUI
 (`requests`, `aiohttp`, `numpy`, `Pillow`).
 
+> Depuis la version 1.1, **toute l'interface est en anglais** (libellés du panneau,
+> options des nodes, messages d'erreur). Les workflows enregistrés avant gardent leurs
+> valeurs françaises : elles restent acceptées (`aucun`, `effacer l'historique`,
+> `premiere image`, `chaque image du lot`...).
+
 ---
 
 ## Exemples
@@ -60,7 +65,7 @@ ComfyUI/user/llm_chathub/
 
 ## 2. Configurer un provider
 
-Onglet **ChatHub** → bouton **Reglages**.
+Onglet **ChatHub** → bouton **Settings**.
 
 | Provider | URL de base par défaut | Clé API |
 |---|---|---|
@@ -69,35 +74,35 @@ Onglet **ChatHub** → bouton **Reglages**.
 | `ollama_cloud` | `https://ollama.com` | **oui** (https://ollama.com/settings/keys) |
 
 1. Choisis le provider.
-2. **Charger les modeles** (ou **Tester la connexion**) : la liste des modèles disponibles
-   est récupérée depuis le serveur, puis tu la choisis dans la liste déroulante.
-3. Colle la clé API seulement pour Ollama Cloud, puis **Enregistrer**.
+2. **Load models** (ou **Test connection**) : la liste des modèles disponibles est
+   récupérée depuis le serveur, puis tu la choisis dans la liste déroulante.
+3. Colle la clé API seulement pour Ollama Cloud, puis **Save**.
 
 La clé peut aussi venir d'une variable d'environnement : `OLLAMA_API_KEY`,
 `LMSTUDIO_API_KEY` / `LM_API_TOKEN`.
 
 ## 3. Utiliser le panneau de chat
 
-1. **+ Nouveau** crée une conversation.
-2. Ouvre **Reglages** pour saisir :
+1. **+ New** crée une conversation.
+2. Ouvre **Settings** pour saisir :
    - le **prompt de depart** (instructions système, ex. « Tu écris des prompts de
      storyboard en anglais, format JSON »),
    - le **contexte de reference** (texte libre toujours inclus : style, charte,
      glossaire...),
    - la température, les max tokens et le nombre de **tours d'historique** envoyés.
-3. Pour donner des documents au modele : coche **RAG actif**, puis dans **Reglages** →
-   section *RAG documents* clique **Ajouter des documents** et choisis tes fichiers
+3. Pour donner des documents au modele : coche **RAG on**, puis dans **Settings** →
+   section *RAG documents* clique **Add documents** et choisis tes fichiers
    (`.txt .md .json .csv .srt .py .html`... plusieurs à la fois). Ils sont copiés dans
    `ComfyUI/user/llm_chathub/documents/`, listés dans le panneau (taille + `x` pour
    retirer) et **indexés automatiquement** : la réponse cite la source utilisée.
    Le champ dossier accepte aussi un chemin complet (ex. `D:\projets\docs`) pour
-   indexer une arborescence existante, puis **Indexer les documents**. Le bouton
-   **Tester le RAG** montre les extraits que le modele recevrait pour une question.
+   indexer une arborescence existante, puis **Index documents**. Le bouton
+   **Test RAG** montre les extraits que le modele recevrait pour une question.
    Les PDF/DOCX binaires ne sont pas lus : convertis-les en texte d'abord.
-4. Écris ton message, joins une ou plusieurs images avec **Image**, **Envoyer**.
+4. Écris ton message, joins une ou plusieurs images avec **Image**, **Send**.
    La réponse s'affiche en streaming.
-5. Sur chaque message : **Copier**, **Modifier** (relance la suite), **Regenerer**,
-   **Supprimer**, **Tronquer ici**.
+5. Sur chaque message : **Copy**, **Edit** (relance la suite), **Regenerate**,
+   **Delete**, **Truncate here**.
 
 Le sélecteur en haut liste toutes les conversations enregistrées ; tout survit à un
 redémarrage de ComfyUI.
@@ -106,10 +111,10 @@ redémarrage de ComfyUI.
 
 Les modeles de raisonnement (Qwen3, DeepSeek-R1, Gemma « thinking », ...) streament
 leur chaine de pensee separement de la reponse. ChatHub l'affiche dans un bloc
-repliable **« Reflexion du modele »** et ne la melange jamais a la reponse.
+repliable **Model reasoning** et ne la melange jamais a la reponse.
 
 Attention : sur ces modeles le raisonnement consomme le budget de `Max tokens`. Si la
-reponse revient vide avec la mention « Le modele a raisonne sans repondre », augmente
+reponse revient vide avec la mention "The model reasoned without replying", augmente
 `Max tokens` (2000 a 4000 est un bon point de depart). Une reponse vide n'est jamais
 renvoyee au modele dans les tours suivants.
 
@@ -118,12 +123,12 @@ renvoyee au modele dans les tours suivants.
 | Node | Rôle |
 |---|---|
 | **LLM ChatHub - Provider** | choisit provider / URL / modèle / température / max tokens. |
-| **LLM ChatHub - Session + prompt de depart** | ouvre (ou vide) une conversation persistante et fixe le prompt système, le contexte de référence et le RAG. Le bouton **RAG upload (fichiers)** importe des documents directement depuis le node. |
+| **LLM ChatHub - Session + starting prompt** | ouvre (ou vide) une conversation persistante et fixe le prompt système, le contexte de référence et le RAG. Le bouton **RAG upload (files)** importe des documents directement depuis le node. |
 | **LLM ChatHub - Chat** | envoie un message (+ image optionnelle + contexte optionnel) et renvoie la réponse. |
 | **LLM ChatHub - RAG Indexer** | indexe un dossier de documents. |
 | **LLM ChatHub - RAG Retrieve** | renvoie les extraits pertinents pour une requête. |
-| **LLM ChatHub - Historique (lecture)** | relit la conversation dans le graphe. |
-| **LLM ChatHub - Historique (edition)** | efface / tronque / change le prompt système. |
+| **LLM ChatHub - History (read)** | relit la conversation dans le graphe. |
+| **LLM ChatHub - History (edit)** | efface / tronque / change le prompt système. |
 
 Chaîne type :
 
@@ -133,9 +138,9 @@ Provider ─► Session ─► Chat(reply) ─► ton workflow (CLIPTextEncode, 
                         └── RAG Retrieve(context)   (ou le champ context du Chat)
 ```
 
-### Bouton « RAG upload (fichiers) » du node Session
+### Bouton « RAG upload (files) » du node Session
 
-Sous `rag_top_k`, le bouton **RAG upload (fichiers)** ouvre le sélecteur de fichiers du
+Sous `rag_top_k`, le bouton **RAG upload (files)** ouvre le sélecteur de fichiers du
 navigateur : les documents choisis sont copiés dans
 `ComfyUI/user/llm_chathub/documents/` (même dossier que le panneau), le champ
 `rag_folder` est rempli avec ce dossier, `rag_enabled` passe à *on* et l'index est
@@ -155,7 +160,8 @@ Notes utiles :
 - Le champ `session_id` accepte un identifiant libre (`story_01`) ou `auto` : dans ce
   cas chaque node **Chat** garde sa propre conversation (clé = node id).
 - `history_limit = 0` dans la Session signifie « tout l'historique disponible ».
-- `image_mode = chaque image du lot` envoie une requête par frame d'un batch d'images.
+- `image_mode = every image in the batch` envoie une requête par frame d'un batch
+  d'images (l'ancienne valeur `chaque image du lot` reste acceptée).
 - Le paramètre `persist` désactivé n'écrit rien en base (utile pour du batch).
 
 ## 5. API HTTP
@@ -282,7 +288,7 @@ chat("Donne-moi 5 idees de prompts cinematographiques")
   raisonnement a mangé le budget.
 - **Accents bizarres (`cinÃ©ma`)** : une conversation enregistrée avant le correctif
   d'encodage peut contenir du texte corrompu et le modèle le recopie ; repartez sur une
-  nouvelle conversation (**+ Nouveau**).
+  nouvelle conversation (**+ New**).
 - **Les réponses sont longues à arriver** : le panneau affiche les tokens au fil de
   l'eau ; le node Chat, lui, attend la fin de la génération.
 - Logs : `ComfyUI/user/comfyui.log`, plus l'onglet console du navigateur

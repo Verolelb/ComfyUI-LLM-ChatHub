@@ -113,8 +113,8 @@ def _reference_block(reference: str) -> str:
     if not reference:
         return ""
     return (
-        "\n\n--- CONTEXTE DE REFERENCE FOURNI PAR L'UTILISATEUR ---\n"
-        f"{reference}\n--- FIN DU CONTEXTE DE REFERENCE ---"
+        "\n\n--- REFERENCE CONTEXT PROVIDED BY THE USER ---\n"
+        f"{reference}\n--- END OF REFERENCE CONTEXT ---"
     )
 
 
@@ -123,9 +123,9 @@ def _rag_block(results: list[dict]) -> str:
     if not context:
         return ""
     return (
-        "\n\n--- EXTRAITS DE DOCUMENTS (RAG) ---\n"
-        "Utilise ces extraits quand ils sont pertinents et cite le fichier entre crochets.\n\n"
-        f"{context}\n--- FIN DES EXTRAITS ---"
+        "\n\n--- DOCUMENT EXCERPTS (RAG) ---\n"
+        "Use these excerpts when they are relevant and cite the file between square brackets.\n\n"
+        f"{context}\n--- END OF EXCERPTS ---"
     )
 
 
@@ -142,7 +142,7 @@ def resolve_conversation(
             conversation = store.update_conversation(conversation["id"], **overrides) or conversation
         return conversation
     if not create:
-        raise ValueError(f"Conversation inconnue: {conversation_id}")
+        raise ValueError(f"Unknown conversation: {conversation_id}")
     return store.create_conversation(id=conversation_id or None, **overrides)
 
 
@@ -341,7 +341,7 @@ def run_chat(
         assistant_message = store.add_message(
             conversation["id"],
             "assistant",
-            reply if (reply or not error) else f"[erreur] {error}",
+            reply if (reply or not error) else f"[error] {error}",
             None,
             meta={
                 "provider": resolved["provider"],
@@ -395,7 +395,7 @@ def regenerate(
                 target = message
                 break
     if target is None:
-        raise ValueError("Aucune reponse a regenerer dans cette conversation.")
+        raise ValueError("No reply to regenerate in this conversation.")
 
     index = messages.index(target)
     last_user = None
@@ -404,7 +404,7 @@ def regenerate(
             last_user = message
             break
     if last_user is None:
-        raise ValueError("Aucun message utilisateur avant cette reponse.")
+        raise ValueError("No user message before this reply.")
 
     store.delete_from_message(conversation_id, last_user["id"], include=True)
     return run_chat(
@@ -421,7 +421,7 @@ def edit_message(conversation_id: str, message_id: str, content: str, images=Non
     """Edit a message; everything after it is removed (like ChatGPT's edit)."""
     message = store.get_message(message_id)
     if not message or message["conversation_id"] != conversation_id:
-        raise ValueError("Message introuvable.")
+        raise ValueError("Message not found.")
     store.update_message(message_id, content, images)
     store.delete_from_message(conversation_id, message_id, include=False)
     return store.get_conversation(conversation_id) or {}
