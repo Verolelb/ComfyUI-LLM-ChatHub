@@ -92,6 +92,12 @@ The panel is the **ChatHub** button in ComfyUI's left vertical icon bar (between
 and *Templates*). One click opens it, a second click on the same tab closes it; drag
 its right edge to widen the sidebar if the text looks clipped.
 
+**Settings** takes over the whole panel while it is open: the transcript, the status
+chips and the composer step aside so every option is on screen instead of inside a
+small scrolling box. **Hide settings** brings the conversation (and the message field)
+back. On a very short window the settings still scroll — there is simply less room
+than controls.
+
 1. **+ New** creates a conversation.
 2. Open **Settings** to set:
    - the **starting prompt** (system instructions, e.g. "You write storyboard prompts

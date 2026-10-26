@@ -211,6 +211,17 @@ const CSS = `
 .llmch-chip.on { border-color:var(--p-primary-color,#3b82f6); color:var(--p-primary-color,#8ab4f8); opacity:1; }
 .llmch-panel { border:1px solid var(--border-color,#3a3a3a); border-radius:8px; padding:8px;
   display:flex; flex-direction:column; gap:8px; overflow-y:auto; max-height:52%; background:var(--comfy-menu-bg,#202020); }
+/* While the settings are open they own the height: the transcript and the status chips
+   step aside so every option is on screen instead of inside a small scrolling box. */
+.llmch-root.settings-open .llmch-panel { flex:1 1 auto; min-height:0; max-height:none; gap:4px; padding:6px; }
+.llmch-root.settings-open .llmch-messages,
+.llmch-root.settings-open .llmch-composer,
+.llmch-root.settings-open .llmch-chips { display:none; }
+.llmch-root.settings-open .llmch-section { gap:3px; }
+.llmch-root.settings-open .llmch-input,
+.llmch-root.settings-open .llmch-select { padding:3px 6px; }
+.llmch-root.settings-open .llmch-btn { padding:3px 7px; }
+.llmch-root.settings-open .llmch-files { max-height:64px; }
 .llmch-section { display:flex; flex-direction:column; gap:5px; }
 .llmch-label { font-size:10px; text-transform:uppercase; letter-spacing:.06em; opacity:.6; }
 .llmch-messages { flex:1 1 auto; overflow-y:auto; display:flex; flex-direction:column; gap:8px;
@@ -679,7 +690,7 @@ function renderHeader() {
         onclick: () => { state.showPanel = !state.showPanel; renderAll(); },
       }),
     ]),
-    el("div", { class: "llmch-row" }, [
+    el("div", { class: "llmch-row llmch-chips" }, [
       ragButton,
       indexChip,
       el("span", {
@@ -716,9 +727,9 @@ function settingsPanel() {
   const maxTokens = el("input", { class: "llmch-input", type: "number", min: "16", max: "131072", value: conversation?.max_tokens ?? settings.chat?.max_tokens ?? 1024 });
   const historyLimit = el("input", { class: "llmch-input", type: "number", min: "0", max: "200", value: conversation?.history_limit ?? settings.chat?.history_limit ?? 20 });
 
-  const systemPrompt = el("textarea", { class: "llmch-textarea", rows: 4, placeholder: "Starting prompt / system instructions" });
+  const systemPrompt = el("textarea", { class: "llmch-textarea", rows: 3, placeholder: "Starting prompt / system instructions" });
   systemPrompt.value = conversation?.system_prompt || settings.chat?.system_prompt || "";
-  const reference = el("textarea", { class: "llmch-textarea", rows: 3, placeholder: "Reference context, always included (free text)" });
+  const reference = el("textarea", { class: "llmch-textarea", rows: 2, placeholder: "Reference context, always included (free text)" });
   reference.value = conversation?.reference || "";
 
   const ragFolder = el("input", { class: "llmch-input", placeholder: "Folder of documents to index", value: conversation?.rag_folder || settings.rag?.folder || "" });
@@ -997,7 +1008,10 @@ function settingsPanel() {
       reference,
     ]),
     el("div", { class: "llmch-section" }, [
-      el("div", { class: "llmch-label", text: "RAG documents (text, markdown, code...)" }),
+      el("div", {
+        class: "llmch-label",
+        text: `RAG documents - index: ${state.index?.documents || 0} doc / ${state.index?.chunks || 0} excerpts`,
+      }),
       el("div", { class: "llmch-row" }, [
         el("button", { class: "llmch-btn primary", text: "Add documents", onclick: () => filePicker.click() }),
         filePicker,
@@ -1009,11 +1023,6 @@ function settingsPanel() {
         el("label", { class: "llmch-grow" }, [el("div", { class: "llmch-label", text: "Embedding model" }), embedModel]),
       ]),
       el("div", { class: "llmch-row" }, [indexButton, testRag, clearIndex]),
-      el("div", {
-        class: "llmch-label",
-        text: `Indexed: ${state.index?.documents || 0} document(s), ${state.index?.chunks || 0} excerpt(s), ` +
-          `${state.index?.embedded || 0} with embeddings`,
-      }),
     ]),
   ]);
 
@@ -1056,6 +1065,7 @@ function renderControls() {
 
 function renderAll() {
   if (!rootEl) return;
+  rootEl.classList.toggle("settings-open", Boolean(state.showPanel));
   const scroll = rootEl.querySelector(".llmch-messages")?.scrollTop ?? 0;
   const nodes = [
     renderHeader(),

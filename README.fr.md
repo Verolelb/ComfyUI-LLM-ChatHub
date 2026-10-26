@@ -96,6 +96,12 @@ La clé peut aussi venir d'une variable d'environnement : `OLLAMA_API_KEY`,
 
 ## 3. Utiliser le panneau de chat
 
+**Settings** occupe tout le panneau tant qu'il est ouvert : l'historique, les pastilles
+de statut et la zone de saisie s'effacent pour que toutes les options tiennent à
+l'écran au lieu d'être dans une petite boîte avec ascenseur. **Hide settings** ramène
+la conversation (et le champ de saisie). Sur une fenêtre très basse les réglages
+défilent encore : il y a simplement moins de place que de contrôles.
+
 1. **+ New** crée une conversation.
 2. Ouvre **Settings** pour saisir :
    - le **prompt de depart** (instructions système, ex. « Tu écris des prompts de
