@@ -68,8 +68,12 @@ ComfyUI/user/llm_chathub/
 | `ollama_cloud` | `https://ollama.com` | **yes** (https://ollama.com/settings/keys) |
 
 1. Pick the provider.
-2. **Load models** (or **Test connection**): the list of available models is fetched
-   from the server, then you pick one in the dropdown.
+2. The **model** field lists every model the selected provider reports: open the list
+   and pick one, or type a name that is not in it. The list refreshes by itself when
+   you switch provider, so models appear as soon as you select Ollama or Ollama Cloud;
+   **Reload models** fetches it again (after `ollama pull`, or after loading another
+   model in LM Studio), and **Test connection** only checks the server answers.
+   If the field is empty the first model of the list is kept automatically.
 3. Paste the API key for Ollama Cloud only, then **Save**.
 
 The key can also come from an environment variable: `OLLAMA_API_KEY`,
@@ -271,8 +275,11 @@ chat("Give me 5 cinematic prompt ideas")
 - **"Could not reach lmstudio ..."**: start LM Studio → *Developer* → *Start
   Server*, or `ollama serve`.
 - **HTTP 401/403 on ollama_cloud**: missing or invalid API key.
+- **The model list is empty**: the provider answered but reported no model — start
+  LM Studio's server, `ollama pull` something, or check the Ollama Cloud key; then
+  *Reload models*.
 - **HTTP 404**: the model name does not exist on the server — use
-  *Load models*.
+  *Reload models*.
 - **A document is ignored**: only text formats are read (no PDF/DOCX), and files that
   are too short (fewer than 20 useful characters) are skipped.
 - **RAG answers poorly / no embeddings used**: set an embedding model

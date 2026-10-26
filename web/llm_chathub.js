@@ -33,6 +33,7 @@ const state = {
   showPanel: false,
   index: { documents: 0, chunks: 0, embedded: 0, folder: "" },
   documents: [],
+  modelCache: {},
   status: "",
   error: "",
 };
@@ -700,9 +701,16 @@ function settingsPanel() {
 
   const providerInfo = settings.providers?.[activeProvider] || {};
   const baseUrl = el("input", { class: "llmch-input", placeholder: "Base URL", value: providerInfo.base_url || "" });
-  const model = el("input", { class: "llmch-input", placeholder: "model", value: conversation?.model || providerInfo.model || "" });
+  // A datalist keeps the field free-form (a model missing from the server list can
+  // still be typed) while offering every model the provider reports.
+  const modelOptions = el("datalist", { id: "llmch-model-options" });
+  const model = el("input", {
+    class: "llmch-input",
+    placeholder: "model (pick one in the list or type a name)",
+    list: "llmch-model-options",
+    value: conversation?.model || providerInfo.model || "",
+  });
   const apiKey = el("input", { class: "llmch-input", type: "password", placeholder: providerInfo.has_key ? "(key saved)" : "API key (Ollama Cloud)" });
-  const modelList = el("select", { class: "llmch-select", style: "display:none" });
 
   const temperature = el("input", { class: "llmch-input", type: "number", step: "0.05", min: "0", max: "2", value: conversation?.temperature ?? settings.chat?.temperature ?? 0.7 });
   const maxTokens = el("input", { class: "llmch-input", type: "number", min: "16", max: "131072", value: conversation?.max_tokens ?? settings.chat?.max_tokens ?? 1024 });
@@ -717,33 +725,61 @@ function settingsPanel() {
   const ragTopK = el("input", { class: "llmch-input", type: "number", min: "1", max: "20", value: conversation?.rag_top_k ?? settings.rag?.top_k ?? 4 });
   const embedModel = el("input", { class: "llmch-input", placeholder: "embedding model (empty = chat model)", value: settings.rag?.embed_model || "" });
 
+  function applyModels(models, target) {
+    modelOptions.replaceChildren(...models.map((name) => el("option", { value: name })));
+    // A brand-new conversation has no model yet: pick the first one so the panel is
+    // usable straight away, and say so rather than choosing silently.
+    if (models.length && !model.value.trim()) {
+      model.value = models[0];
+      return `kept "${models[0]}"`;
+    }
+    return "";
+  }
+
+  /** Fill the model list of a provider, from the cache unless `force` is set. */
+  async function fetchModels({ announce = true, force = false, provider, base, key } = {}) {
+    const target = provider || providerSelect.value;
+    const baseValue = base === undefined ? baseUrl.value : base;
+    const cacheKey = `${target}|${baseValue}`;
+    const cached = state.modelCache[cacheKey];
+    if (!force && cached) {
+      applyModels(cached, target);
+      if (announce) setStatus(`${cached.length} model(s) on ${target}.`);
+      return cached;
+    }
+    if (announce) setStatus(`Fetching models from ${target}...`);
+    try {
+      const data = await postJSON(`${BASE}/models`, {
+        provider: target,
+        base_url: baseValue,
+        api_key: key === undefined ? apiKey.value : key,
+      });
+      const models = (data.models || []).filter(Boolean);
+      state.modelCache[cacheKey] = models;
+      const picked = applyModels(models, target);
+      if (!models.length) setStatus(`No model listed by ${target}.`, announce);
+      else if (announce || picked) setStatus(`${models.length} model(s) on ${target}${picked ? ` - ${picked}` : ""}.`);
+      return models;
+    } catch (error) {
+      delete state.modelCache[cacheKey];
+      modelOptions.replaceChildren();
+      setStatus(String(error.message || error), announce);
+      return [];
+    }
+  }
+
   providerSelect.addEventListener("change", () => {
     const info = settings.providers?.[providerSelect.value] || {};
     baseUrl.value = info.base_url || "";
     model.value = info.model || "";
+    modelOptions.replaceChildren();
+    fetchModels({ announce: true, force: true });
   });
 
   const loadModels = el("button", {
-    class: "llmch-btn", text: "Load models",
-    onclick: async () => {
-      setStatus("Fetching models...");
-      try {
-        const data = await postJSON(`${BASE}/models`, {
-          provider: providerSelect.value,
-          base_url: baseUrl.value,
-          api_key: apiKey.value,
-        });
-        const models = data.models || [];
-        if (!models.length) { setStatus("The server returned no model.", true); return; }
-        modelList.replaceChildren(...models.map((name) =>
-          el("option", { value: name, text: name, selected: name === model.value })));
-        modelList.style.display = "block";
-        modelList.onchange = () => { model.value = modelList.value; };
-        setStatus(`${models.length} model(s) available.`);
-      } catch (error) {
-        setStatus(String(error.message || error), true);
-      }
-    },
+    class: "llmch-btn", text: "Reload models",
+    title: "Ask the selected provider for its model list",
+    onclick: () => fetchModels({ announce: true, force: true }),
   });
 
   const testConnection = el("button", {
@@ -945,8 +981,7 @@ function settingsPanel() {
       el("div", { class: "llmch-label", text: "Connection (global)" }),
       providerSelect,
       baseUrl,
-      el("div", { class: "llmch-row" }, [model, loadModels]),
-      modelList,
+      el("div", { class: "llmch-row" }, [model, modelOptions, loadModels]),
       apiKey,
       el("div", { class: "llmch-row" }, [
         el("label", { class: "llmch-grow" }, [el("div", { class: "llmch-label", text: "Temperature" }), temperature]),
@@ -983,6 +1018,7 @@ function settingsPanel() {
   ]);
 
   refreshFiles();
+  fetchModels({ announce: false });
 
   return panel;
 }

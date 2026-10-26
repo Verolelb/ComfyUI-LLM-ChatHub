@@ -74,8 +74,13 @@ Onglet **ChatHub** → bouton **Settings**.
 | `ollama_cloud` | `https://ollama.com` | **oui** (https://ollama.com/settings/keys) |
 
 1. Choisis le provider.
-2. **Load models** (ou **Test connection**) : la liste des modèles disponibles est
-   récupérée depuis le serveur, puis tu la choisis dans la liste déroulante.
+2. Le champ **model** liste tous les modèles que le provider sélectionné annonce :
+   ouvre la liste et choisis-en un, ou tape un nom qui n'y figure pas. La liste se
+   recharge toute seule quand tu changes de provider : les modèles apparaissent donc
+   dès que tu choisis Ollama ou Ollama Cloud. **Reload models** la récupère à nouveau
+   (après un `ollama pull`, ou après avoir chargé un autre modèle dans LM Studio) et
+   **Test connection** vérifie seulement que le serveur répond. Si le champ est vide,
+   le premier modèle de la liste est retenu automatiquement.
 3. Colle la clé API seulement pour Ollama Cloud, puis **Save**.
 
 La clé peut aussi venir d'une variable d'environnement : `OLLAMA_API_KEY`,
@@ -278,6 +283,9 @@ chat("Donne-moi 5 idees de prompts cinematographiques")
 - **HTTP 401/403 sur ollama_cloud** : clé API absente ou invalide.
 - **HTTP 404** : le nom du modèle n'existe pas sur le serveur — utilise
   *Charger les modeles*.
+- **La liste de modèles est vide** : le provider répond mais n'annonce aucun modèle —
+  démarre le serveur LM Studio, fais un `ollama pull`, ou vérifie la clé Ollama Cloud,
+  puis *Reload models*.
 - **Un document n'est pas pris en compte** : seuls les formats texte sont lus (pas de
   PDF/DOCX), et les fichiers trop courts (moins de 20 caractères utiles) sont ignorés.
 - **Le RAG répond mal / n'utilise pas d'embeddings** : indique un modèle d'embedding
