@@ -32,6 +32,16 @@ def _base(base_url: str, fallback_provider: str) -> str:
     base = (base_url or "").strip().rstrip("/")
     if not base:
         base = config.PROVIDER_DEFAULTS[fallback_provider]["base_url"]
+    if fallback_provider in ("ollama", "ollama_cloud"):
+        # Ollama speaks its own dialect at the root; a copied OpenAI-style base URL
+        # (``https://ollama.com/v1``) would turn ``/api/tags`` into a 404.
+        stripped = True
+        while stripped:
+            stripped = False
+            for suffix in ("v1", "api"):
+                if base.endswith("/" + suffix):
+                    base = base[: -len(suffix) - 1].rstrip("/")
+                    stripped = True
     return base
 
 
@@ -275,7 +285,18 @@ def list_models(provider: str, base_url: str, api_key: str = "", timeout: float 
     if provider == "lmstudio":
         names = [item.get("id", "") for item in (data.get("data") or [])]
     else:
-        names = [item.get("name") or item.get("model") or "" for item in (data.get("models") or [])]
+        entries = data.get("models") or []
+        if provider == "ollama":
+            # A local Ollama also advertises the cloud models it can proxy: they carry
+            # ``remote_host`` (or a ``-cloud`` suffix on older versions) and do not live
+            # on this machine, so they belong to the ollama_cloud list instead.
+            entries = [
+                entry
+                for entry in entries
+                if not entry.get("remote_host")
+                and not (entry.get("name") or entry.get("model") or "").endswith("-cloud")
+            ]
+        names = [item.get("name") or item.get("model") or "" for item in entries]
     return sorted({name for name in names if name})
 
 

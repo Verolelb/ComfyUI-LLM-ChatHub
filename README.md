@@ -76,6 +76,13 @@ ComfyUI/user/llm_chathub/
    If the field is empty the first model of the list is kept automatically.
 3. Paste the API key for Ollama Cloud only, then **Save**.
 
+Each provider only advertises its **own** models. A local Ollama also reports the
+cloud models it can proxy (`…-cloud`, or anything tagged with a `remote_host`): those
+are hidden from the **Ollama (local)** list, so a local pick always runs on this
+machine, and they show up under **Ollama Cloud** instead. Ollama base URLs ending in
+`/v1` or `/api` are accepted as well — the native paths are rebuilt from the root, so
+a copied `https://ollama.com/v1` keeps working.
+
 The key can also come from an environment variable: `OLLAMA_API_KEY`,
 `LMSTUDIO_API_KEY` / `LM_API_TOKEN`.
 
@@ -278,6 +285,8 @@ chat("Give me 5 cinematic prompt ideas")
 - **The model list is empty**: the provider answered but reported no model — start
   LM Studio's server, `ollama pull` something, or check the Ollama Cloud key; then
   *Reload models*.
+- **A model is missing from the Ollama (local) list**: it is a cloud model proxied by
+your daemon (`…-cloud`) — pick it under **Ollama Cloud**, where it belongs.
 - **HTTP 404**: the model name does not exist on the server — use
   *Reload models*.
 - **A document is ignored**: only text formats are read (no PDF/DOCX), and files that

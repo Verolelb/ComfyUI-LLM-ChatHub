@@ -83,6 +83,14 @@ Onglet **ChatHub** → bouton **Settings**.
    le premier modèle de la liste est retenu automatiquement.
 3. Colle la clé API seulement pour Ollama Cloud, puis **Save**.
 
+Chaque provider n'annonce que **ses** modèles. Un Ollama local liste aussi les
+modèles cloud qu'il sait relayer (`…-cloud`, ou toute entrée portant un
+`remote_host`) : ils sont masqués dans la liste **Ollama (local)**, pour qu'un choix
+local tourne bien sur cette machine, et ils apparaissent côté **Ollama Cloud**. Les
+base URL Ollama terminées par `/v1` ou `/api` sont acceptées : les chemins natifs sont
+reconstruits depuis la racine, donc un `https://ollama.com/v1` copié continue de
+fonctionner.
+
 La clé peut aussi venir d'une variable d'environnement : `OLLAMA_API_KEY`,
 `LMSTUDIO_API_KEY` / `LM_API_TOKEN`.
 
@@ -283,6 +291,8 @@ chat("Donne-moi 5 idees de prompts cinematographiques")
 - **HTTP 401/403 sur ollama_cloud** : clé API absente ou invalide.
 - **HTTP 404** : le nom du modèle n'existe pas sur le serveur — utilise
   *Charger les modeles*.
+- **Un modèle manque dans la liste Ollama (local)** : c'est un modèle cloud relayé par
+  ton daemon (`…-cloud`) — il se choisit dans **Ollama Cloud**, là où il appartient.
 - **La liste de modèles est vide** : le provider répond mais n'annonce aucun modèle —
   démarre le serveur LM Studio, fais un `ollama pull`, ou vérifie la clé Ollama Cloud,
   puis *Reload models*.
