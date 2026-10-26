@@ -1141,6 +1141,35 @@ function renderAll() {
   if (container) container.scrollTop = scroll;
 }
 
+/**
+ * Refresh the panel after a graph run.
+ *
+ * A node can open or extend a conversation; without this the panel stayed frozen on
+ * whatever it showed last, and the new conversation was only visible after leaving
+ * the tab and coming back.
+ */
+async function syncAfterGraphRun() {
+  if (!rootEl || state.streaming) return;
+  try {
+    const before = state.conversations.map((c) => `${c.id}:${c.message_count}:${c.updated_at}`).join("|");
+    await refreshState();
+    const after = state.conversations.map((c) => `${c.id}:${c.message_count}:${c.updated_at}`).join("|");
+    if (!after || before === after) return; // Nothing new: keep the view, and the focus.
+    const emptyView = !state.messages.length && !(state.draft || "").trim();
+    const newest = state.conversations[0]?.id;
+    const current = state.conversation?.id;
+    const target = emptyView || !state.conversations.some((c) => c.id === current) ? newest : current;
+    if (target && target !== current) await openConversation(target);
+    else await reloadMessages();
+    renderAll();
+    const shown = state.conversations.find((c) => c.id === state.conversation?.id);
+    if (shown) setStatus(`Graph run: "${shown.title}" (${shown.message_count} message(s)).`);
+  } catch (error) {
+    // The panel is only a viewer here: a failed sync must not disturb the chat.
+    console.warn("[LLM ChatHub] refresh after graph run failed", error);
+  }
+}
+
 async function mount(target) {
   injectCss();
   rootEl = el("div", { class: "llmch-root" });
@@ -1291,6 +1320,17 @@ app.registerExtension({
         mount(element);
       },
     };
+    for (const event of ["execution_success", "execution_error", "execution_interrupted"]) {
+      api.addEventListener(event, () => { syncAfterGraphRun(); });
+    }
+    // Those events are not emitted by every ComfyUI version, so a light poll covers
+    // the rest of them. It only costs one request, and only while the tab is on
+    // screen: a hidden or closed panel does nothing.
+    setInterval(() => {
+      // clientWidth is 0 while the tab is hidden: a closed panel costs nothing.
+      if (!rootEl?.isConnected || !rootEl.clientWidth) return;
+      syncAfterGraphRun();
+    }, 4000);
     try {
       app.extensionManager.registerSidebarTab(tab);
     } catch (error) {

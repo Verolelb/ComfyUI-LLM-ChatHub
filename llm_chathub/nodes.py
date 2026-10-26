@@ -72,12 +72,16 @@ def _make_config(
     history_limit: int = 20,
     embed_model: str = "",
 ) -> dict:
-    name = None if provider_choice in PANEL_CHOICES else provider_choice
+    panel = provider_choice in PANEL_CHOICES
+    name = None if panel else provider_choice
+    # With the panel choice the connection is the panel's, not the leftovers of this
+    # node's widgets: they keep the URL/model of a previous provider, and honouring
+    # them sent an "Ollama Cloud" conversation to the LM Studio port.
     resolved = config.resolve_provider(
         name,
-        model=(model or "").strip() or None,
-        base_url=(base_url or "").strip() or None,
-        api_key=(api_key or "").strip() or None,
+        model=None if panel else ((model or "").strip() or None),
+        base_url=None if panel else ((base_url or "").strip() or None),
+        api_key=None if panel else ((api_key or "").strip() or None),
     )
     return {
         "provider": resolved["provider"],
@@ -131,6 +135,12 @@ class LCProvider:
     RETURN_NAMES = ("config", "info")
     FUNCTION = "run"
     CATEGORY = CATEGORY
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        # The connection lives in the panel, outside the graph: without this ComfyUI
+        # reuses the cached config and a provider switch never reaches the nodes.
+        return config.connection_fingerprint()
 
     def run(self, provider, base_url, model, api_key, temperature, max_tokens, history_limit, embed_model):
         conf = _make_config(

@@ -8,6 +8,7 @@ never destroys a chat history.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import threading
@@ -215,6 +216,25 @@ def save_settings(settings: dict) -> dict:
 
 def update_settings(patch: dict) -> dict:
     return save_settings(_deep_merge(load_settings(), patch or {}))
+
+
+def connection_fingerprint() -> str:
+    """Hash of the settings a node run depends on.
+
+    ComfyUI caches node outputs, so a workflow keeps the provider that was saved
+    when it last ran. Nodes compare this fingerprint to re-run as soon as the panel
+    changes (provider, URL, model, prompt, RAG). ``last_conversation`` is left out:
+    opening a chat in the panel must not invalidate a workflow.
+    """
+    settings = load_settings()
+    relevant = {
+        "active_provider": settings.get("active_provider"),
+        "providers": settings.get("providers"),
+        "chat": settings.get("chat"),
+        "rag": settings.get("rag"),
+    }
+    blob = json.dumps(relevant, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
 
 
 def resolve_provider(provider=None, model=None, base_url=None, api_key=None) -> dict:

@@ -159,6 +159,21 @@ Provider ─► Session ─► Chat(reply) ─► your workflow (CLIPTextEncode,
                         └── RAG Retrieve(context)   (or the Chat node's context field)
 ```
 
+### `panel (saved settings)` really means the panel
+
+With the panel choice, a node's connection (**base URL**, **model**, API key) is the
+one saved in the panel, not the leftover values still sitting in its own widgets — they
+keep the URL of whatever provider was used before, and honouring them sent an "Ollama
+Cloud" conversation to the LM Studio port. `temperature`, `max_tokens` and
+`history_limit` stay per node. To pin a specific URL or model, pick the provider
+explicitly instead of the panel entry.
+
+Changing the panel provider re-runs the **Provider** node on the next *Run*, even with
+an unchanged graph: ComfyUI normally reuses a node's cached output, which used to keep
+the provider that was saved when the workflow last executed. The **ChatHub** panel
+also refreshes itself after a graph run (a light poll while the tab is on screen), so a
+conversation opened by a node appears without leaving the tab.
+
 ### The Session node's "RAG upload (files)" button
 
 Below `rag_top_k`, the **RAG upload (files)** button opens the browser's file picker:

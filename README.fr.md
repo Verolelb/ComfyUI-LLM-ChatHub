@@ -164,6 +164,21 @@ Provider ─► Session ─► Chat(reply) ─► ton workflow (CLIPTextEncode, 
                         └── RAG Retrieve(context)   (ou le champ context du Chat)
 ```
 
+### `panel (saved settings)` veut bien dire le panneau
+
+Avec le choix « panneau », la connexion d'un node (**URL**, **modèle**, clé API) est
+celle enregistrée dans le panneau, et non les valeurs restées dans ses propres
+widgets — elles gardent l'URL du provider utilisé avant, et les honorer envoyait une
+conversation « Ollama Cloud » sur le port de LM Studio. `temperature`, `max_tokens` et
+`history_limit` restent réglables par node. Pour imposer une URL ou un modèle précis,
+choisis le provider explicitement au lieu de l'entrée panneau.
+
+Changer de provider dans le panneau rejoue le node **Provider** au *Run* suivant,
+même graphe inchangé : ComfyUI réutilise normalement la sortie en cache d'un node,
+ce qui conservait le provider enregistré au dernier lancement. Le panneau **ChatHub**
+se rafraîchit aussi tout seul après un run (une requête légère tant que l'onglet est
+visible), donc une conversation ouverte par un node apparaît sans quitter l'onglet.
+
 ### Bouton « RAG upload (files) » du node Session
 
 Sous `rag_top_k`, le bouton **RAG upload (files)** ouvre le sélecteur de fichiers du
