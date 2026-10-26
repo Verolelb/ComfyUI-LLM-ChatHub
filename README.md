@@ -1,0 +1,273 @@
+# LLM ChatHub
+
+A complete chat client inside ComfyUI, wired to **LM Studio**, **Ollama (local)** or
+**Ollama Cloud**, with:
+
+- a **chat sidebar** (token streaming, history, editing, regeneration);
+- **nodes** that pipe the model's answer into any workflow (prompt → sampler,
+  negative prompt, captions, translation, prompt engineering…);
+- a **starting prompt**: system instructions + reference context + images + RAG;
+- **persistent history**: conversations are stored in SQLite, restored after a
+  restart, editable, regenerable, truncatable — like ChatGPT;
+- **document RAG** (a folder of text files) using the provider's embeddings, with an
+  automatic fallback to BM25 keyword search;
+- **image input** for vision models (Qwen-VL, Gemma 3, LLaVA…).
+
+No dependency to install: everything it needs already ships with ComfyUI
+(`requests`, `aiohttp`, `numpy`, `Pillow`).
+
+🇫🇷 Documentation française : [README.fr.md](README.fr.md)
+
+---
+
+## 1. Installation
+
+Copy the `ComfyUI-LLM-ChatHub` folder into `ComfyUI/custom_nodes/` and restart
+ComfyUI. A new **ChatHub** tab appears in the sidebar, and an **LLM ChatHub** category
+in the node menu (right-click → Add Node).
+
+User data (conversation database + images):
+
+```
+ComfyUI/user/llm_chathub/
+├── llm_chathub.sqlite3   # conversations, messages, RAG index, settings
+├── settings.json         # settings + API keys
+├── images/               # images sent to the model
+└── documents/            # documents imported from the panel (RAG source)
+```
+
+> The `LLM_CHATHUB_HOME` environment variable can relocate that folder.
+
+## 2. Configure a provider
+
+**ChatHub** tab → **Reglages** button.
+
+| Provider | Default base URL | API key |
+|---|---|---|
+| `lmstudio` | `http://127.0.0.1:1234/v1` | no (LM Studio: *Developer* tab → *Start Server*) |
+| `ollama` | `http://127.0.0.1:11434` | no (`ollama serve` + `ollama pull <model>`) |
+| `ollama_cloud` | `https://ollama.com` | **yes** (https://ollama.com/settings/keys) |
+
+1. Pick the provider.
+2. **Charger les modeles** (or **Tester la connexion**): the list of available models
+   is fetched from the server, then you pick one in the dropdown.
+3. Paste the API key for Ollama Cloud only, then **Enregistrer**.
+
+The key can also come from an environment variable: `OLLAMA_API_KEY`,
+`LMSTUDIO_API_KEY` / `LM_API_TOKEN`.
+
+## 3. Using the chat panel
+
+The panel is the **ChatHub** button in ComfyUI's left vertical icon bar (between *Apps*
+and *Templates*). One click opens it, a second click on the same tab closes it; drag
+its right edge to widen the sidebar if the text looks clipped.
+
+1. **+ Nouveau** creates a conversation.
+2. Open **Reglages** to set:
+   - the **starting prompt** (system instructions, e.g. "You write storyboard prompts
+     in English, JSON format"),
+   - the **reference context** (free text always included: style, brand guidelines,
+     glossary…),
+   - temperature, max tokens and how many **history turns** are sent.
+3. To give documents to the model: tick **RAG actif**, then in **Reglages** →
+   *RAG documents* click **Ajouter des documents** and pick your files
+   (`.txt .md .json .csv .srt .py .html`… several at once). They are copied into
+   `ComfyUI/user/llm_chathub/documents/`, listed in the panel (size + `x` to remove)
+   and **indexed automatically**: the answer cites the source it used.
+   The folder field also accepts a full path (e.g. `D:\projects\docs`) to index an
+   existing tree, then **Indexer les documents**. The **Tester le RAG** button shows
+   the excerpts the model would receive for a question.
+   Binary PDF/DOCX files are not read: convert them to text first.
+4. Write your message, attach one or more images with **Image**, **Envoyer**.
+   The answer streams in.
+5. On each message: **Copier**, **Modifier** (replays what follows), **Regenerer**,
+   **Supprimer**, **Tronquer ici**.
+
+The selector at the top lists every saved conversation; everything survives a ComfyUI
+restart.
+
+### Models that "think"
+
+Reasoning models (Qwen3, DeepSeek-R1, Gemma "thinking", …) stream their chain of
+thought separately from the answer. ChatHub shows it in a collapsible
+**« Reflexion du modele »** block and never mixes it into the reply.
+
+Note: on those models the reasoning consumes the `Max tokens` budget. If the answer
+comes back empty with "Le modele a raisonne sans repondre", raise `Max tokens` (2000 to
+4000 is a good starting point). An empty answer is never sent back to the model in the
+following turns.
+
+## 4. Using the nodes
+
+| Node | Role |
+|---|---|
+| **LLM ChatHub - Provider (LM Studio / Ollama)** | picks provider / URL / model / temperature / max tokens. |
+| **LLM ChatHub - Session + prompt de depart** | opens (or clears) a persistent conversation and sets the system prompt, reference context and RAG. The **RAG upload (fichiers)** button imports documents straight from the node. |
+| **LLM ChatHub - Chat** | sends a message (+ optional image + optional context) and returns the answer. |
+| **LLM ChatHub - RAG Indexer** | indexes a folder of documents. |
+| **LLM ChatHub - RAG Retrieve** | returns the relevant excerpts for a query. |
+| **LLM ChatHub - Historique (lecture)** | reads the conversation back inside the graph. |
+| **LLM ChatHub - Historique (edition)** | clears / truncates / changes the system prompt. |
+
+Typical chain:
+
+```
+Provider ─► Session ─► Chat(reply) ─► your workflow (CLIPTextEncode, sampler, ...)
+                        ▲
+                        └── RAG Retrieve(context)   (or the Chat node's context field)
+```
+
+### The Session node's "RAG upload (fichiers)" button
+
+Below `rag_top_k`, the **RAG upload (fichiers)** button opens the browser's file picker:
+the chosen documents are copied into `ComfyUI/user/llm_chathub/documents/` (the same
+folder the panel uses), `rag_folder` is filled with that folder, `rag_enabled` is
+switched *on*, and the index is rebuilt right away. While indexing the button shows
+progress (`RAG: 3/7`), then a notification summarises the documents and excerpts that
+were indexed. The `rag_folder` field still works as before to index an existing tree.
+
+The button reindexes **the whole folder**: an import adds the files then replaces the
+index (already imported documents stay included). Conversations that had
+`rag_enabled` on benefit from the new index with no further setup.
+
+Useful notes:
+
+- To send `reply` into an existing node: drag the `reply` output onto the target text
+  widget (e.g. *CLIP Text Encode*'s `text`) — it turns into an input — or right-click
+  the widget → *Convert text to input*.
+- `session_id` accepts a free identifier (`story_01`) or `auto`: with `auto` each
+  **Chat** node keeps its own conversation (keyed by node id).
+- `history_limit = 0` in the Session node means "all available history".
+- `image_mode = chaque image du lot` sends one request per frame of an image batch.
+- `persist` turned off writes nothing to the database (useful for batches).
+
+## 5. HTTP API
+
+All routes live under `/llm_chathub`. Responses are JSON with an `ok` field. The
+`chat`, `regenerate` and `rag/index` routes return a `text/event-stream` with `delta`
+(answer text), `reasoning` (a reasoning model's chain of thought), `progress`
+(indexing), `result` (final summary) and `error` events.
+
+| Method | Route | Body / parameters |
+|---|---|---|
+| GET | `/state` | — (public settings, conversations, index) |
+| POST | `/settings` | settings patch (`active_provider`, `providers`, `chat`, `rag`) |
+| POST | `/models` | `{provider, base_url, api_key}` |
+| GET | `/conversations` | — |
+| GET | `/conversation` | `?id=<id>` |
+| POST | `/conversation/new` | `{id?, provider, model, system_prompt, reference, rag_*...}` (`id` returns 409 if it already exists) |
+| POST | `/conversation/update` | `{id, ...fields}` |
+| POST | `/conversation/delete` | `{id}` |
+| POST | `/chat` | `{conversation_id, text, images:[dataUrl], overrides:{}}` |
+| POST | `/regenerate` | `{conversation_id, message_id}` |
+| POST | `/cancel` | `{conversation_id}` |
+| POST | `/messages/edit` | `{conversation_id, message_id, content}` |
+| POST | `/messages/delete` | `{conversation_id, message_id, from_here}` |
+| POST | `/messages/truncate` | `{conversation_id, keep}` |
+| POST | `/upload` | `{name, data}` → stored image |
+| GET | `/image/{name}` | — |
+| POST | `/rag/index` | `{folder?, provider, base_url, embed_model, chunk_size, overlap}` (no `folder` = imported documents) |
+| GET | `/rag/files` | — (imported documents) |
+| POST | `/rag/files` | `{files:[{name, data(base64)}]}` → copied into `documents/` |
+| POST | `/rag/files/delete` | `{name}` |
+| POST | `/rag/clear` | — |
+| POST | `/rag/test` | `{query, top_k}` |
+| GET | `/health` | — |
+
+### curl
+
+```bash
+# one question, full answer (the SSE stream is returned as is)
+curl -N -X POST http://127.0.0.1:8188/llm_chathub/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"conversation_id":"conv_demo","text":"Explain CFG in three lines"}'
+
+# index a folder
+curl -N -X POST http://127.0.0.1:8188/llm_chathub/rag/index \
+  -H 'Content-Type: application/json' \
+  -d '{"folder":"D:/docs","embed_model":"nomic-embed-text"}'
+
+# search the index
+curl -X POST http://127.0.0.1:8188/llm_chathub/rag/test \
+  -H 'Content-Type: application/json' -d '{"query":"style constraints","top_k":3}'
+```
+
+### JavaScript (browser or Node 18+)
+
+```js
+const base = "http://127.0.0.1:8188";
+
+const res = await fetch(`${base}/llm_chathub/chat`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ conversation_id: "conv_demo", text: "Hello!" }),
+});
+
+const reader = res.body.getReader();
+const decoder = new TextDecoder();
+let buffer = "";
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += decoder.decode(value, { stream: true });
+  const parts = buffer.split("\n\n");
+  buffer = parts.pop();
+  for (const part of parts) {
+    const [head, ...rest] = part.split("\n");
+    const data = rest.map((l) => l.replace(/^data:/, "")).join("");
+    if (!data) continue;
+    if (head.startsWith("event: delta")) process.stdout.write(JSON.parse(data));
+  }
+}
+```
+
+### Python
+
+```python
+import json
+import requests
+
+BASE = "http://127.0.0.1:8188/llm_chathub"
+
+def chat(question, conversation_id="conv_python"):
+    with requests.post(
+        f"{BASE}/chat",
+        json={"conversation_id": conversation_id, "text": question},
+        stream=True,
+        timeout=600,
+    ) as response:
+        response.raise_for_status()
+        for line in response.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data:"):
+                continue
+            payload = json.loads(line[5:].strip())
+            if isinstance(payload, str):
+                print(payload, end="", flush=True)
+
+chat("Give me 5 cinematic prompt ideas")
+```
+
+## 6. Troubleshooting
+
+- **"Impossible de joindre lmstudio ..."**: start LM Studio → *Developer* → *Start
+  Server*, or `ollama serve`.
+- **HTTP 401/403 on ollama_cloud**: missing or invalid API key.
+- **HTTP 404**: the model name does not exist on the server — use
+  *Charger les modeles*.
+- **A document is ignored**: only text formats are read (no PDF/DOCX), and files that
+  are too short (fewer than 20 useful characters) are skipped.
+- **RAG answers poorly / no embeddings used**: set an embedding model
+  (`nomic-embed-text` for Ollama, `text-embedding-*` for LM Studio). Without one, the
+  keyword fallback (BM25) takes over automatically.
+- **Images ignored**: the selected model must be a vision model.
+- **Empty answer although the model "thought"**: raise `Max tokens`, the reasoning ate
+  the budget.
+- **Odd accents (`cinÃ©ma`)**: a conversation saved before the encoding fix can contain
+  corrupted text and the model copies it back; start a new conversation (**+ Nouveau**).
+- **Answers take a while**: the panel shows tokens as they arrive; the Chat node waits
+  for the whole generation.
+- Logs: `ComfyUI/user/comfyui.log`, plus the browser console (`[LLM ChatHub]`).
+
+## 7. License
+
+MIT — see [LICENSE](LICENSE).

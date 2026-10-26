@@ -1,0 +1,13 @@
+# LLM ChatHub has no extra dependency to install: everything it needs is already
+# shipped with ComfyUI (or the Python standard library).
+#
+#   requests  - sync HTTP calls used by the graph nodes
+#   aiohttp   - async HTTP + API routes used by the sidebar panel
+#   numpy     - embedding vector maths for RAG
+#   Pillow    - converting ComfyUI IMAGE tensors to PNG for vision models
+#
+# They are listed here only so the requirement set is explicit and checkable.
+requests
+aiohttp
+numpy
+Pillow

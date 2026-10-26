@@ -1,0 +1,271 @@
+# LLM ChatHub
+
+Un client de tchat complet dans ComfyUI, branché sur **LM Studio**, **Ollama (local)**
+ou **Ollama Cloud**, avec :
+
+- un **panneau de chat** dans la barre latérale (streaming, historique, édition) ;
+- des **nodes** pour brancher la réponse du modèle sur n'importe quel workflow
+  (prompt → sampler, refus, légendes, traduction, prompt-engineering...) ;
+- un **prompt de départ** : instructions système + contexte de référence + images + RAG ;
+- une **historisation persistante** : les conversations sont enregistrées en base SQLite,
+  reprises au redémarrage, éditables, régénérables, tronquables — comme dans ChatGPT ;
+- un **RAG de documents** (dossier de fichiers texte) avec embeddings du provider et
+  repli automatique sur une recherche BM25 mots-clés ;
+- l'**envoi d'images** aux modèles de vision (Qwen-VL, Gemma 3, LLaVA, ...).
+
+Aucune dépendance à installer : tout est déjà présent dans ComfyUI
+(`requests`, `aiohttp`, `numpy`, `Pillow`).
+
+---
+
+## 1. Installation
+
+Copie le dossier `ComfyUI-LLM-ChatHub` dans `ComfyUI/custom_nodes/` puis redémarre
+ComfyUI. Un nouvel onglet **ChatHub** apparaît dans la barre latérale, et la catégorie
+**LLM ChatHub** dans le menu des nodes (clic droit → Add Node).
+
+Données utilisateur (base de conversations + images) :
+
+```
+ComfyUI/user/llm_chathub/
+├── llm_chathub.sqlite3   # conversations, messages, index RAG, réglages
+├── settings.json         # réglages + clés API
+├── images/               # images envoyées au modèle
+└── documents/            # documents importés depuis le panneau (source du RAG)
+```
+
+> La variable d'environnement `LLM_CHATHUB_HOME` permet de déplacer ce dossier.
+
+## 2. Configurer un provider
+
+Onglet **ChatHub** → bouton **Reglages**.
+
+| Provider | URL de base par défaut | Clé API |
+|---|---|---|
+| `lmstudio` | `http://127.0.0.1:1234/v1` | non (LM Studio : onglet *Developer* → *Start Server*) |
+| `ollama` | `http://127.0.0.1:11434` | non (`ollama serve` + `ollama pull <modele>`) |
+| `ollama_cloud` | `https://ollama.com` | **oui** (https://ollama.com/settings/keys) |
+
+1. Choisis le provider.
+2. **Charger les modeles** (ou **Tester la connexion**) : la liste des modèles disponibles
+   est récupérée depuis le serveur, puis tu la choisis dans la liste déroulante.
+3. Colle la clé API seulement pour Ollama Cloud, puis **Enregistrer**.
+
+La clé peut aussi venir d'une variable d'environnement : `OLLAMA_API_KEY`,
+`LMSTUDIO_API_KEY` / `LM_API_TOKEN`.
+
+## 3. Utiliser le panneau de chat
+
+1. **+ Nouveau** crée une conversation.
+2. Ouvre **Reglages** pour saisir :
+   - le **prompt de depart** (instructions système, ex. « Tu écris des prompts de
+     storyboard en anglais, format JSON »),
+   - le **contexte de reference** (texte libre toujours inclus : style, charte,
+     glossaire...),
+   - la température, les max tokens et le nombre de **tours d'historique** envoyés.
+3. Pour donner des documents au modele : coche **RAG actif**, puis dans **Reglages** →
+   section *RAG documents* clique **Ajouter des documents** et choisis tes fichiers
+   (`.txt .md .json .csv .srt .py .html`... plusieurs à la fois). Ils sont copiés dans
+   `ComfyUI/user/llm_chathub/documents/`, listés dans le panneau (taille + `x` pour
+   retirer) et **indexés automatiquement** : la réponse cite la source utilisée.
+   Le champ dossier accepte aussi un chemin complet (ex. `D:\projets\docs`) pour
+   indexer une arborescence existante, puis **Indexer les documents**. Le bouton
+   **Tester le RAG** montre les extraits que le modele recevrait pour une question.
+   Les PDF/DOCX binaires ne sont pas lus : convertis-les en texte d'abord.
+4. Écris ton message, joins une ou plusieurs images avec **Image**, **Envoyer**.
+   La réponse s'affiche en streaming.
+5. Sur chaque message : **Copier**, **Modifier** (relance la suite), **Regenerer**,
+   **Supprimer**, **Tronquer ici**.
+
+Le sélecteur en haut liste toutes les conversations enregistrées ; tout survit à un
+redémarrage de ComfyUI.
+
+### Modeles qui « reflechissent »
+
+Les modeles de raisonnement (Qwen3, DeepSeek-R1, Gemma « thinking », ...) streament
+leur chaine de pensee separement de la reponse. ChatHub l'affiche dans un bloc
+repliable **« Reflexion du modele »** et ne la melange jamais a la reponse.
+
+Attention : sur ces modeles le raisonnement consomme le budget de `Max tokens`. Si la
+reponse revient vide avec la mention « Le modele a raisonne sans repondre », augmente
+`Max tokens` (2000 a 4000 est un bon point de depart). Une reponse vide n'est jamais
+renvoyee au modele dans les tours suivants.
+
+## 4. Utiliser les nodes
+
+| Node | Rôle |
+|---|---|
+| **LLM ChatHub - Provider** | choisit provider / URL / modèle / température / max tokens. |
+| **LLM ChatHub - Session + prompt de depart** | ouvre (ou vide) une conversation persistante et fixe le prompt système, le contexte de référence et le RAG. Le bouton **RAG upload (fichiers)** importe des documents directement depuis le node. |
+| **LLM ChatHub - Chat** | envoie un message (+ image optionnelle + contexte optionnel) et renvoie la réponse. |
+| **LLM ChatHub - RAG Indexer** | indexe un dossier de documents. |
+| **LLM ChatHub - RAG Retrieve** | renvoie les extraits pertinents pour une requête. |
+| **LLM ChatHub - Historique (lecture)** | relit la conversation dans le graphe. |
+| **LLM ChatHub - Historique (edition)** | efface / tronque / change le prompt système. |
+
+Chaîne type :
+
+```
+Provider ─► Session ─► Chat(reply) ─► ton workflow (CLIPTextEncode, sampler, ...)
+                        ▲
+                        └── RAG Retrieve(context)   (ou le champ context du Chat)
+```
+
+### Bouton « RAG upload (fichiers) » du node Session
+
+Sous `rag_top_k`, le bouton **RAG upload (fichiers)** ouvre le sélecteur de fichiers du
+navigateur : les documents choisis sont copiés dans
+`ComfyUI/user/llm_chathub/documents/` (même dossier que le panneau), le champ
+`rag_folder` est rempli avec ce dossier, `rag_enabled` passe à *on* et l'index est
+reconstruit dans la foulée. Pendant l'indexation le bouton affiche la progression
+(`RAG: 3/7`), puis une notification récapitule les documents et extraits indexés. Le
+champ `rag_folder` reste utilisable tel quel pour indexer une arborescence existante.
+
+Le bouton réindexe **tout le dossier** : un import ajoute les fichiers puis remplace
+l'index (les documents déjà importés restent pris en compte). Les conversations qui
+avaient `rag_enabled` actif bénéficient du nouvel index sans autre réglage.
+
+Notes utiles :
+
+- Pour envoyer `reply` dans une node existante : glisse la sortie `reply` sur le
+  widget texte voulu (ex. `text` de *CLIP Text Encode*) — il se transforme en entrée —
+  ou clic droit sur le widget → *Convert text to input*.
+- Le champ `session_id` accepte un identifiant libre (`story_01`) ou `auto` : dans ce
+  cas chaque node **Chat** garde sa propre conversation (clé = node id).
+- `history_limit = 0` dans la Session signifie « tout l'historique disponible ».
+- `image_mode = chaque image du lot` envoie une requête par frame d'un batch d'images.
+- Le paramètre `persist` désactivé n'écrit rien en base (utile pour du batch).
+
+## 5. API HTTP
+
+Toutes les routes sont sous `/llm_chathub`. Les réponses sont du JSON avec un champ
+`ok`. Les routes `chat`, `regenerate` et `rag/index` renvoient un flux
+`text/event-stream` avec les évènements `delta` (texte de la réponse), `reasoning`
+(chaine de pensee d'un modele de raisonnement), `progress` (indexation), `result`
+(résumé final) et `error`.
+
+| Méthode | Route | Corps / paramètres |
+|---|---|---|
+| GET | `/state` | — (réglages publics, conversations, index) |
+| POST | `/settings` | patch des réglages (`active_provider`, `providers`, `chat`, `rag`) |
+| POST | `/models` | `{provider, base_url, api_key}` |
+| GET | `/conversations` | — |
+| GET | `/conversation` | `?id=<id>` |
+| POST | `/conversation/new` | `{id?, provider, model, system_prompt, reference, rag_*...}` (`id` renvoie 409 s'il existe déjà) |
+| POST | `/conversation/update` | `{id, ...champs}` |
+| POST | `/conversation/delete` | `{id}` |
+| POST | `/chat` | `{conversation_id, text, images:[dataUrl], overrides:{}}` |
+| POST | `/regenerate` | `{conversation_id, message_id}` |
+| POST | `/cancel` | `{conversation_id}` |
+| POST | `/messages/edit` | `{conversation_id, message_id, content}` |
+| POST | `/messages/delete` | `{conversation_id, message_id, from_here}` |
+| POST | `/messages/truncate` | `{conversation_id, keep}` |
+| POST | `/upload` | `{name, data}` → image stockée |
+| GET | `/image/{name}` | — |
+| POST | `/rag/index` | `{folder?, provider, base_url, embed_model, chunk_size, overlap}` (`folder` absent = documents importés) |
+| GET | `/rag/files` | — (documents importés) |
+| POST | `/rag/files` | `{files:[{name, data(base64)}]}` → copie dans `documents/` |
+| POST | `/rag/files/delete` | `{name}` |
+| POST | `/rag/clear` | — |
+| POST | `/rag/test` | `{query, top_k}` |
+| GET | `/health` | — |
+
+### curl
+
+```bash
+# une question, réponse complète (le flux SSE est renvoyé tel quel)
+curl -N -X POST http://127.0.0.1:8188/llm_chathub/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"conversation_id":"conv_demo","text":"Explique le CFG en 3 lignes"}'
+
+# indexer un dossier
+curl -N -X POST http://127.0.0.1:8188/llm_chathub/rag/index \
+  -H 'Content-Type: application/json' \
+  -d '{"folder":"D:/docs","embed_model":"nomic-embed-text"}'
+
+# rechercher dans l'index
+curl -X POST http://127.0.0.1:8188/llm_chathub/rag/test \
+  -H 'Content-Type: application/json' -d '{"query":"contraintes de style","top_k":3}'
+```
+
+### JavaScript (navigateur ou Node 18+)
+
+```js
+const base = "http://127.0.0.1:8188";
+
+const res = await fetch(`${base}/llm_chathub/chat`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ conversation_id: "conv_demo", text: "Bonjour !" }),
+});
+
+const reader = res.body.getReader();
+const decoder = new TextDecoder();
+let buffer = "";
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buffer += decoder.decode(value, { stream: true });
+  const parts = buffer.split("\n\n");
+  buffer = parts.pop();
+  for (const part of parts) {
+    const [head, ...rest] = part.split("\n");
+    const data = rest.map((l) => l.replace(/^data:/, "")).join("");
+    if (!data) continue;
+    if (head.startsWith("event: delta")) process.stdout.write(JSON.parse(data));
+  }
+}
+```
+
+### Python
+
+```python
+import json
+import requests
+
+BASE = "http://127.0.0.1:8188/llm_chathub"
+
+def chat(question, conversation_id="conv_python"):
+    with requests.post(
+        f"{BASE}/chat",
+        json={"conversation_id": conversation_id, "text": question},
+        stream=True,
+        timeout=600,
+    ) as response:
+        response.raise_for_status()
+        for line in response.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data:"):
+                continue
+            payload = json.loads(line[5:].strip())
+            if isinstance(payload, str):
+                print(payload, end="", flush=True)
+
+chat("Donne-moi 5 idees de prompts cinematographiques")
+```
+
+## 6. Dépannage
+
+- **« Impossible de joindre lmstudio ... »** : lance LM Studio → *Developer* → *Start
+  Server*, ou `ollama serve`.
+- **HTTP 401/403 sur ollama_cloud** : clé API absente ou invalide.
+- **HTTP 404** : le nom du modèle n'existe pas sur le serveur — utilise
+  *Charger les modeles*.
+- **Un document n'est pas pris en compte** : seuls les formats texte sont lus (pas de
+  PDF/DOCX), et les fichiers trop courts (moins de 20 caractères utiles) sont ignorés.
+- **Le RAG répond mal / n'utilise pas d'embeddings** : indique un modèle d'embedding
+  (`nomic-embed-text` pour Ollama, `text-embedding-*` pour LM Studio). Sans modèle, le
+  repli mots-clés (BM25) prend le relais automatiquement.
+- **Images non prises en compte** : le modèle sélectionné doit être un modèle de vision.
+- **Réponse vide alors que le modèle a « réfléchi »** : augmente `Max tokens`, le
+  raisonnement a mangé le budget.
+- **Accents bizarres (`cinÃ©ma`)** : une conversation enregistrée avant le correctif
+  d'encodage peut contenir du texte corrompu et le modèle le recopie ; repartez sur une
+  nouvelle conversation (**+ Nouveau**).
+- **Les réponses sont longues à arriver** : le panneau affiche les tokens au fil de
+  l'eau ; le node Chat, lui, attend la fin de la génération.
+- Logs : `ComfyUI/user/comfyui.log`, plus l'onglet console du navigateur
+  (`[LLM ChatHub]`).
+
+## 7. Licence
+
+MIT.
