@@ -152,7 +152,7 @@ following turns.
 | Node | Role |
 |---|---|
 | **LLM ChatHub - Provider (LM Studio / Ollama)** | picks provider / URL / model / temperature / max tokens. |
-| **LLM ChatHub - Session + starting prompt** | opens (or clears) a persistent conversation and sets the system prompt, reference context and RAG. The **RAG upload (files)** button imports documents straight from the node. |
+| **LLM ChatHub - Session + starting prompt** | opens (or clears) a persistent conversation and sets the system prompt, reference context and RAG. The **RAG upload (files)** button imports documents straight from the node; the **Conversations...** button points the node at any stored conversation. |
 | **LLM ChatHub - Chat** | sends a message (+ optional image + optional context) and returns the answer. |
 | **LLM ChatHub - RAG Indexer** | indexes a folder of documents. |
 | **LLM ChatHub - RAG Retrieve** | returns the relevant excerpts for a query. |
@@ -180,7 +180,10 @@ Changing the panel provider re-runs the **Provider** node on the next *Run*, eve
 an unchanged graph: ComfyUI normally reuses a node's cached output, which used to keep
 the provider that was saved when the workflow last executed. The **ChatHub** panel
 also refreshes itself after a graph run (a light poll while the tab is on screen), so a
-conversation opened by a node appears without leaving the tab.
+conversation opened by a node appears without leaving the tab. It only follows a
+conversation the run *created*: a run that extends an older chat no longer pulls the
+view away from a fresh **+ New** chat, which used to send the next message into the
+previous conversation.
 
 ### The Session node's "RAG upload (files)" button
 
@@ -194,6 +197,22 @@ were indexed. The `rag_folder` field still works as before to index an existing 
 The button reindexes **the whole folder**: an import adds the files then replaces the
 index (already imported documents stay included). Conversations that had
 `rag_enabled` on benefit from the new index with no further setup.
+
+### The Session node's "Conversations..." button
+
+Under `session_id`, the **Conversations...** button lists every stored conversation
+(message count and model next to the title). Picking one writes its id into
+`session_id`, so the graph continues **that** chat: the answer lands in the same
+history the panel shows, and the choice is saved in the workflow.
+
+The dialog also offers **+ New chat** (creates a conversation and points the node at
+it) and **Back to auto** (`session_id = auto`: the node goes back to its own private
+conversation, keyed by node id).
+
+A picked conversation keeps its own system prompt, reference text and RAG folder: the
+node only writes back the fields it really fills in, so selecting a stored chat does
+not wipe what was set in the panel. The node's provider, model, temperature and max
+tokens still drive the request itself.
 
 Useful notes:
 
@@ -213,8 +232,9 @@ Useful notes:
   conversation: the next text-only turn is back on the normal prompt. Handy to send a
   picture with its own rules ("describe the person, answer in English, no
   commentary") while the text turns keep theirs.
-- `session_id` accepts a free identifier (`story_01`) or `auto`: with `auto` each
-  **Chat** node keeps its own conversation (keyed by node id).
+- `session_id` accepts a free identifier (`story_01`), a stored `conv_...` id, or
+  `auto`: with `auto` each **Chat** node keeps its own conversation (keyed by node
+  id). The **Conversations...** button fills the field for you.
 - `history_limit = 0` in the Session node means "all available history".
 - `image_mode = chaque image du lot` sends one request per frame of an image batch.
 - `persist` turned off writes nothing to the database (useful for batches).

@@ -259,6 +259,14 @@ const CSS = `
 .llmch-overlay { position:fixed; right:16px; bottom:16px; width:420px; height:640px; z-index:9999;
   border:1px solid var(--border-color,#444); border-radius:10px; box-shadow:0 10px 40px rgba(0,0,0,.5);
   overflow:hidden; background:var(--comfy-menu-bg,#1e1e1e); }
+.llmch-modal { position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,.55);
+  display:flex; align-items:center; justify-content:center; }
+.llmch-modal-body { width:min(560px,92vw); max-height:82vh; overflow:auto; padding:14px; border-radius:10px;
+  border:1px solid var(--border-color,#444); box-shadow:0 10px 40px rgba(0,0,0,.6);
+  background:var(--comfy-menu-bg,#1e1e1e); color:var(--fg-color,#e6e6e6);
+  display:flex; flex-direction:column; gap:8px; font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:12px; box-sizing:border-box; }
+.llmch-modal-body * { box-sizing:border-box; }
 `;
 
 function injectCss() {
@@ -288,6 +296,7 @@ async function newConversation() {
   const provider = settings.active_provider;
   const info = settings.providers?.[provider] || {};
   let created = null;
+  let failure = "";
   try {
     created = await postJSON(`${BASE}/conversation/new`, {
       provider,
@@ -303,16 +312,22 @@ async function newConversation() {
   } catch (error) {
     // Still refresh below: the conversation may have been stored even if the
     // answer never came back, and the panel must show what actually exists.
-    setStatus(String(error.message || error), true);
+    failure = String(error.message || error);
   }
   await refreshState();
-  // Use the id the server returned, never "the first row": a just created
-  // conversation must open even while another one is being written.
-  const target =
-    created?.conversation?.id ||
-    state.conversation?.id ||
-    state.conversations[0]?.id;
-  if (target) await openConversation(target);
+  // Only ever land on the conversation the server returned. Falling back to the
+  // current one (or to "the first row") kept the previous chat selected, so the
+  // next message was appended to the old conversation instead of a fresh one.
+  const target = created?.conversation?.id;
+  if (target) {
+    await openConversation(target);
+    return created.conversation;
+  }
+  setStatus(
+    failure ? `Could not create a conversation: ${failure}` : "Could not create a conversation.",
+    true,
+  );
+  return null;
 }
 
 async function patchConversation(fields) {
@@ -1152,15 +1167,19 @@ async function syncAfterGraphRun() {
   if (!rootEl || state.streaming) return;
   try {
     const before = state.conversations.map((c) => `${c.id}:${c.message_count}:${c.updated_at}`).join("|");
+    const known = new Set(state.conversations.map((c) => c.id));
     await refreshState();
     const after = state.conversations.map((c) => `${c.id}:${c.message_count}:${c.updated_at}`).join("|");
     if (!after || before === after) return; // Nothing new: keep the view, and the focus.
-    const emptyView = !state.messages.length && !(state.draft || "").trim();
-    const newest = state.conversations[0]?.id;
+    // Only a conversation that did not exist before the run may take the view. A
+    // run that merely extended an older chat must not steal the panel away from
+    // the empty chat the user just opened with "+ New" (that is how a new chat
+    // used to end up writing into the previous conversation).
+    const appeared = state.conversations.find((c) => !known.has(c.id));
     const current = state.conversation?.id;
-    const target = emptyView || !state.conversations.some((c) => c.id === current) ? newest : current;
-    if (target && target !== current) await openConversation(target);
-    else await reloadMessages();
+    if (appeared) await openConversation(appeared.id);
+    else if (current && state.conversations.some((c) => c.id === current)) await reloadMessages();
+    else if (state.conversations[0]) await openConversation(state.conversations[0].id);
     renderAll();
     const shown = state.conversations.find((c) => c.id === state.conversation?.id);
     if (shown) setStatus(`Graph run: "${shown.title}" (${shown.message_count} message(s)).`);
@@ -1287,6 +1306,116 @@ function attachRagUpload(node) {
   });
 }
 
+/**
+ * Let a node point at a stored conversation.
+ *
+ * The node creates its own chat (``auto``), but a graph can also continue a
+ * conversation written from the panel: this dialog writes the chosen id into the
+ * ``session_id`` widget, so the choice is saved in the workflow itself.
+ */
+async function openConversationsDialog(node, idWidget) {
+  const overlay = el("div", { class: "llmch-modal" });
+  const close = () => overlay.remove();
+  overlay.addEventListener("mousedown", (event) => { if (event.target === overlay) close(); });
+
+  let list = [];
+  try {
+    const data = await getJSON(`${BASE}/conversations`);
+    list = data.conversations || [];
+  } catch { /* keep the empty list: the dialog still offers "+ New chat" */ }
+
+  const current = String(idWidget.value || "auto").trim();
+  const select = el("select", { class: "llmch-select" }, list.map((conversation) =>
+    el("option", {
+      value: conversation.id,
+      text: `${conversation.title || "Untitled"} (${conversation.message_count || 0}) - ${conversation.model || conversation.provider || "?"}`,
+      selected: conversation.id === current,
+    })));
+  const status = el("div", { class: "llmch-status" });
+  const settings = state.settings || {};
+  const activeProvider = settings.active_provider || "";
+
+  const useButton = el("button", {
+    class: "llmch-btn primary",
+    text: "Use this conversation",
+    disabled: !list.length,
+    onclick: () => {
+      if (!select.value) return;
+      const label = select.options[select.selectedIndex]?.text || select.value;
+      setWidgetValue(node, idWidget, select.value);
+      notify("Conversation selected", label);
+      close();
+    },
+  });
+
+  const newButton = el("button", {
+    class: "llmch-btn",
+    text: "+ New chat",
+    title: "Create a conversation and point this node at it",
+    onclick: async () => {
+      newButton.disabled = true;
+      status.className = "llmch-status";
+      status.textContent = "Creating...";
+      try {
+        const created = await postJSON(`${BASE}/conversation/new`, {
+          provider: activeProvider || undefined,
+          model: settings.providers?.[activeProvider]?.model || undefined,
+        });
+        const id = created?.conversation?.id;
+        if (!id) throw new Error("the server did not return a conversation");
+        setWidgetValue(node, idWidget, id);
+        notify("New conversation", id);
+        close();
+      } catch (error) {
+        status.className = "llmch-status error";
+        status.textContent = String(error?.message || error);
+        newButton.disabled = false;
+      }
+    },
+  });
+
+  const autoButton = el("button", {
+    class: "llmch-btn",
+    text: "Back to auto",
+    title: "Stop pointing at a stored chat: this node keeps its own conversation",
+    onclick: () => {
+      setWidgetValue(node, idWidget, "auto");
+      notify("Conversation", "This node keeps its own chat again.");
+      close();
+    },
+  });
+
+  overlay.append(el("div", { class: "llmch-modal-body" }, [
+    el("div", { class: "llmch-label", text: "Stored conversations" }),
+    list.length
+      ? select
+      : el("div", { class: "llmch-empty", text: "No stored conversation yet." }),
+    el("div", { class: "llmch-row" }, [
+      useButton,
+      newButton,
+      autoButton,
+      el("div", { class: "llmch-grow" }),
+      el("button", { class: "llmch-btn", text: "Cancel", onclick: close }),
+    ]),
+    status,
+    el("div", { class: "llmch-note", text: `Current: ${current || "auto"}` }),
+  ]));
+  document.body.append(overlay);
+}
+
+function attachConversationPicker(node) {
+  if (!node?.widgets || node.__llmchConvPicker) return;
+  const idWidget = node.widgets.find((widget) => widget.name === "session_id");
+  if (!idWidget) return;
+  node.__llmchConvPicker = true;
+  const button = node.addWidget("button", "Conversations...", null, () => {
+    openConversationsDialog(node, idWidget).catch((error) => {
+      notify("Conversations", String(error?.message || error), "error");
+    });
+  }, { serialize: false });
+  if (!button) node.__llmchConvPicker = false;
+}
+
 app.registerExtension({
   name: "LLM.ChatHub.RagUpload",
   async beforeRegisterNodeDef(nodeType, nodeData) {
@@ -1298,6 +1427,11 @@ app.registerExtension({
         attachRagUpload(this);
       } catch (error) {
         console.warn("[LLM ChatHub] RAG upload button unavailable", error);
+      }
+      try {
+        attachConversationPicker(this);
+      } catch (error) {
+        console.warn("[LLM ChatHub] conversation picker unavailable", error);
       }
       return result;
     };

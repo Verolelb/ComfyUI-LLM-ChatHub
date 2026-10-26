@@ -158,7 +158,7 @@ renvoyee au modele dans les tours suivants.
 | Node | Rôle |
 |---|---|
 | **LLM ChatHub - Provider** | choisit provider / URL / modèle / température / max tokens. |
-| **LLM ChatHub - Session + starting prompt** | ouvre (ou vide) une conversation persistante et fixe le prompt système, le contexte de référence et le RAG. Le bouton **RAG upload (files)** importe des documents directement depuis le node. |
+| **LLM ChatHub - Session + starting prompt** | ouvre (ou vide) une conversation persistante et fixe le prompt système, le contexte de référence et le RAG. Le bouton **RAG upload (files)** importe des documents directement depuis le node ; le bouton **Conversations...** branche le node sur n'importe quelle conversation enregistrée. |
 | **LLM ChatHub - Chat** | envoie un message (+ image optionnelle + contexte optionnel) et renvoie la réponse. |
 | **LLM ChatHub - RAG Indexer** | indexe un dossier de documents. |
 | **LLM ChatHub - RAG Retrieve** | renvoie les extraits pertinents pour une requête. |
@@ -186,7 +186,10 @@ Changer de provider dans le panneau rejoue le node **Provider** au *Run* suivant
 même graphe inchangé : ComfyUI réutilise normalement la sortie en cache d'un node,
 ce qui conservait le provider enregistré au dernier lancement. Le panneau **ChatHub**
 se rafraîchit aussi tout seul après un run (une requête légère tant que l'onglet est
-visible), donc une conversation ouverte par un node apparaît sans quitter l'onglet.
+visible), donc une conversation ouverte par un node apparaît sans quitter l'onglet. Il
+ne suit que les conversations *créées* par le run : un run qui rallonge une ancienne
+conversation ne retire plus l'affichage de la nouvelle conversation **+ New**, ce qui
+envoyait le message suivant dans la conversation précédente.
 
 ### Bouton « RAG upload (files) » du node Session
 
@@ -201,6 +204,24 @@ champ `rag_folder` reste utilisable tel quel pour indexer une arborescence exist
 Le bouton réindexe **tout le dossier** : un import ajoute les fichiers puis remplace
 l'index (les documents déjà importés restent pris en compte). Les conversations qui
 avaient `rag_enabled` actif bénéficient du nouvel index sans autre réglage.
+
+### Bouton « Conversations... » du node Session
+
+Sous `session_id`, le bouton **Conversations...** liste toutes les conversations
+enregistrées (nombre de messages et modèle affichés à côté du titre). En choisir une
+écrit son identifiant dans `session_id` : le graphe continue **cette** conversation,
+la réponse arrive dans le même historique que le panneau, et le choix est enregistré
+dans le workflow.
+
+La fenêtre propose aussi **+ New chat** (créer une conversation et y brancher le node)
+et **Back to auto** (`session_id = auto` : le node reprend sa propre conversation
+privée, indexée par node id).
+
+Une conversation choisie garde son prompt système, son contexte de référence et son
+dossier RAG : le node n'écrit que les champs qu'il remplit vraiment, donc sélectionner
+une conversation existante n'efface pas ce qui a été réglé dans le panneau. Le
+provider, le modèle, la température et les max tokens du node pilotent toujours la
+requête elle-même.
 
 Notes utiles :
 
@@ -222,8 +243,9 @@ Notes utiles :
   Pratique pour accompagner une photo de ses propres consignes (« décris la personne,
   réponds en anglais, sans commentaire ») pendant que les tours texte gardent les
   leurs.
-- Le champ `session_id` accepte un identifiant libre (`story_01`) ou `auto` : dans ce
-  cas chaque node **Chat** garde sa propre conversation (clé = node id).
+- Le champ `session_id` accepte un identifiant libre (`story_01`), un identifiant
+  enregistré `conv_...`, ou `auto` : dans ce cas chaque node **Chat** garde sa propre
+  conversation (clé = node id). Le bouton **Conversations...** remplit le champ.
 - `history_limit = 0` dans la Session signifie « tout l'historique disponible ».
 - `image_mode = every image in the batch` envoie une requête par frame d'un batch
   d'images (l'ancienne valeur `chaque image du lot` reste acceptée).

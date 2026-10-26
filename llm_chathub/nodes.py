@@ -161,7 +161,14 @@ class LCSession:
         return {
             "required": {
                 "config": (CONFIG_TYPE,),
-                "session_id": ("STRING", {"default": "auto", "multiline": False}),
+                # ``auto`` keeps this node's own conversation; a ``conv_...`` value
+                # points at a stored chat (the "Conversations..." button under the
+                # node fills it in, so a panel conversation can be continued here).
+                "session_id": ("STRING", {
+                    "default": "auto",
+                    "multiline": False,
+                    "tooltip": "auto = this node's own chat. Use the Conversations... button to continue a stored conversation.",
+                }),
                 "system_prompt": ("STRING", {"default": "", "multiline": True}),
                 "reference_text": ("STRING", {"default": "", "multiline": True}),
                 "history_limit": ("INT", {"default": 0, "min": 0, "max": 200}),
@@ -193,7 +200,8 @@ class LCSession:
     ):
         reset = _upgrade(reset, RESET_ALIASES)
         raw = (session_id or "").strip()
-        if not raw or raw.lower() == "auto":
+        explicit = bool(raw) and raw.lower() != "auto"
+        if not explicit:
             conversation_id = f"conv_node_{_slug(str(unique_id or '0'))}"
         elif raw.startswith("conv_"):
             conversation_id = raw
@@ -218,7 +226,16 @@ class LCSession:
         if conversation is None:
             conversation = store.create_conversation(id=conversation_id, **fields)
         elif fields:
-            conversation = store.update_conversation(conversation_id, **fields) or conversation
+            # A conversation picked from the panel keeps its own prompt and RAG
+            # settings: only the fields the node really fills in are written back,
+            # so selecting a stored chat does not wipe what was set there.
+            patch = fields if not explicit else {
+                key: value
+                for key, value in fields.items()
+                if not (isinstance(value, str) and not value.strip())
+            }
+            if patch:
+                conversation = store.update_conversation(conversation_id, **patch) or conversation
 
         if reset == "clear history":
             store.truncate_messages(conversation_id, 0)
