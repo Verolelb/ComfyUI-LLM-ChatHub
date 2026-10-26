@@ -18,6 +18,28 @@ Aucune dépendance à installer : tout est déjà présent dans ComfyUI
 
 ---
 
+## Exemples
+
+Deux sessions reelles avec un modele local LM Studio. Le node **Chat** se place entre
+le node **Session** et le graphe : sa sortie `reply` alimente *Preview as Text*, et le
+JSON renvoye est ce que le workflow transforme en image finale.
+
+**1 — Ecriture de prompt structure.** Le panneau contient le prompt systeme et la
+demande ("a picture of a cat black on a roof, in jdon for BB8X") ; le node du graphe pose
+la meme question et renvoie le JSON de scene (canvas, camera, items, bbox) qui pilote le
+rendu. Meme conversation, deux points d'entree :
+
+![Panneau de chat et chaine de nodes ecrivant un JSON de scene pour un rendu photorealiste](examples/example-1-photoreal-prompt.png)
+
+**2 — Iteration sur place.** Meme session, un tour de plus : "change the style in anime
+90's". Le modele reecrit tout le JSON (nouveaux `items`, nouveau `caption`, meme
+composition) et le run suivant rend la version anime — sans copier-coller entre deux
+runs :
+
+![Meme chaine apres une demande de style anime annees 90, avec la nouvelle image rendue](examples/example-2-anime-restyle.png)
+
+---
+
 ## 1. Installation
 
 Copie le dossier `ComfyUI-LLM-ChatHub` dans `ComfyUI/custom_nodes/` puis redémarre
