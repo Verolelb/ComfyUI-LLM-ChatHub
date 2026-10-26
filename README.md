@@ -199,6 +199,12 @@ Useful notes:
   again. Old workflows load it with `seed = 0`, and it is a plain
   `control_after_generate` input, so it behaves the same with either node definition
   schema (v1 `INPUT_TYPES`, v3 `io.Int`).
+- **Image prompt** (`image_system_prompt`, Chat node) replaces the conversation's
+  system prompt **for the turns that carry an image** only. Empty = unchanged, so a
+  workflow that already works keeps its behaviour. It is not stored in the
+  conversation: the next text-only turn is back on the normal prompt. Handy to send a
+  picture with its own rules ("describe the person, answer in English, no
+  commentary") while the text turns keep theirs.
 - `session_id` accepts a free identifier (`story_01`) or `auto`: with `auto` each
   **Chat** node keeps its own conversation (keyed by node id).
 - `history_limit = 0` in the Session node means "all available history".

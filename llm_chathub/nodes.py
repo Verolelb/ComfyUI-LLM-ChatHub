@@ -259,6 +259,14 @@ class LCChat:
                     "control_after_generate": "fixed",
                     "tooltip": "Sampling seed sent to the model. Fixed reuses the cached answer, randomize/increment asks again.",
                 }),
+                # Used only for turns that carry an image: it replaces the
+                # conversation's system prompt, so a picture can be handled with its
+                # own instructions. Empty = keep the conversation prompt.
+                "image_system_prompt": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "tooltip": "System prompt used instead of the conversation one when an image is sent. Empty = unchanged.",
+                }),
             },
             "optional": {"image": ("IMAGE",)},
         }
@@ -268,7 +276,7 @@ class LCChat:
     FUNCTION = "run"
     CATEGORY = CATEGORY
 
-    def run(self, session, message, image_mode, persist, context="", seed=0, image=None):
+    def run(self, session, message, image_mode, persist, context="", seed=0, image_system_prompt="", image=None):
         conversation_id = session.get("conversation_id")
         conf = session.get("config") or {}
         connection = {
@@ -306,6 +314,7 @@ class LCChat:
                 persist=bool(persist),
                 connection=connection,
                 seed=None if seed is None else int(seed),
+                image_system_prompt=image_system_prompt,
                 **overrides,
             )
             if result.get("error") and not result.get("reply"):

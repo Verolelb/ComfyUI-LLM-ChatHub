@@ -153,8 +153,11 @@ def build_messages(
     query: str,
     query_images: list[str] | None = None,
     rag_results: list[dict] | None = None,
+    system_override: str | None = None,
 ) -> list[dict]:
-    system = (conversation.get("system_prompt") or config.DEFAULT_SYSTEM_PROMPT).strip()
+    system = (system_override or "").strip() or (
+        conversation.get("system_prompt") or config.DEFAULT_SYSTEM_PROMPT
+    ).strip()
     system += _reference_block(conversation.get("reference", ""))
     if rag_results:
         system += _rag_block(rag_results)
@@ -241,6 +244,7 @@ def run_chat(
     connection: dict | None = None,
     create_if_missing: bool = True,
     seed: int | None = None,
+    image_system_prompt: str | None = None,
     **overrides,
 ) -> dict:
     """Send one user turn and return the assistant reply.
@@ -289,8 +293,16 @@ def run_chat(
     turn_images.extend(attach_b64 or [])
 
     history = [_hydrate_images(message) for message in _history_for(conversation)]
+    # A turn that carries an image may follow its own instructions (the Chat node's
+    # image prompt). Without an image, or with an empty prompt, nothing changes.
+    system_override = (image_system_prompt or "").strip() if turn_images else ""
     messages = build_messages(
-        conversation, history, query=text, query_images=turn_images, rag_results=rag_results
+        conversation,
+        history,
+        query=text,
+        query_images=turn_images,
+        rag_results=rag_results,
+        system_override=system_override,
     )
 
     if persist:

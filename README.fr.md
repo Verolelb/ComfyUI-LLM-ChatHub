@@ -206,6 +206,13 @@ Notes utiles :
   `seed = 0`, et c'est une entrée `control_after_generate` classique : même
   comportement avec les deux schémas de définition de nœud (v1 `INPUT_TYPES`,
   v3 `io.Int`).
+- Le **prompt image** (`image_system_prompt`, node Chat) remplace le prompt système
+  de la conversation **uniquement pour les tours qui portent une image**. Vide =
+  inchangé, donc un workflow qui fonctionne déjà garde son comportement. Il n'est pas
+  stocké dans la conversation : le tour suivant, sans image, reprend le prompt normal.
+  Pratique pour accompagner une photo de ses propres consignes (« décris la personne,
+  réponds en anglais, sans commentaire ») pendant que les tours texte gardent les
+  leurs.
 - Le champ `session_id` accepte un identifiant libre (`story_01`) ou `auto` : dans ce
   cas chaque node **Chat** garde sa propre conversation (clé = node id).
 - `history_limit = 0` dans la Session signifie « tout l'historique disponible ».
