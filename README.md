@@ -30,22 +30,26 @@ No dependency to install: everything it needs already ships with ComfyUI
 
 ## Examples
 
-Two real sessions with a local LM Studio model. The **Chat** node sits between the
-**Session** node and the graph: its `reply` output feeds *Preview as Text*, and the
+An annotated tour of the extension with a local LM Studio model: one overview rather
+than a series of screenshots. The **Session** node opens the conversation, the **Chat**
+node sits between it and the graph — its `reply` output feeds *Preview as Text*, and the
 JSON it returns is what the workflow turns into the final image.
 
-**1 — Structured prompt writing.** The panel holds the system prompt and the request
-("a picture of a cat black on a roof, in jdon for BB8X"); the graph node asks the same
-question and returns the scene JSON (canvas, camera, items, bbox) that drives the
-render. Same conversation, two entry points:
+- **Chat here, like in ChatGPT or Gemini.** The **ChatHub** tab docks in ComfyUI's
+  sidebar with the usual chat layout: your turns on one side, the model's answer
+  streaming on the other. A session starts from a *starting prompt* and can carry a
+  document (RAG), an image or plain text; every later turn is appended to that history.
+- **Settings here.** Provider (LM Studio / Ollama / Ollama Cloud), base URL, model, API
+  key, temperature, max tokens, history limit, embed model — plus the conversation's own
+  system prompt and reference context.
+- **Find your conversations here.** The **Conversations…** button on the *Session* node
+  lists every stored chat with its message count and model, so a graph can continue an
+  existing conversation, start a new one, or fall back to `auto`.
+- **Conversation management here.** The same list in the sidebar panel: switch chat,
+  rename it, delete it. The whole history is persisted in SQLite and stays editable turn
+  by turn.
 
-![Chat panel and node chain writing a scene JSON for a photoreal render](examples/example-1-photoreal-prompt.png)
-
-**2 — Iterating in place.** Same session, one new turn: "change the style in anime 90's".
-The model rewrites the whole JSON (new `items`, new `caption`, same layout) and the next
-run renders the anime version — no manual copy-paste between runs:
-
-![Same chain after asking for a 1990s anime style, with the new rendered image](examples/example-2-anime-restyle.png)
+![Annotated overview of the ChatHub chat panel, the node chain, the settings and where to find and manage conversations](examples/chathub-overview.png)
 
 ## 1. Installation
 

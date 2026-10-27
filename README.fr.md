@@ -34,23 +34,27 @@ Aucune dépendance à installer : tout est déjà présent dans ComfyUI
 
 ## Exemples
 
-Deux sessions reelles avec un modele local LM Studio. Le node **Chat** se place entre
-le node **Session** et le graphe : sa sortie `reply` alimente *Preview as Text*, et le
-JSON renvoye est ce que le workflow transforme en image finale.
+Visite annotée de l'extension avec un modèle local LM Studio : une vue d'ensemble
+plutôt qu'une série de captures. Le node **Session** ouvre la conversation, le node
+**Chat** se place entre lui et le graphe — sa sortie `reply` alimente *Preview as Text*,
+et le JSON renvoyé est ce que le workflow transforme en image finale.
 
-**1 — Ecriture de prompt structure.** Le panneau contient le prompt systeme et la
-demande ("a picture of a cat black on a roof, in jdon for BB8X") ; le node du graphe pose
-la meme question et renvoie le JSON de scene (canvas, camera, items, bbox) qui pilote le
-rendu. Meme conversation, deux points d'entree :
+- **Le tchat, ici, comme dans ChatGPT ou Gemini.** L'onglet **ChatHub** s'ancre dans la
+  barre latérale de ComfyUI avec la mise en page d'un tchat classique : tes messages
+  d'un côté, la réponse du modèle en streaming de l'autre. Une session part d'un
+  *prompt de départ* et peut transporter un document (RAG), une image ou du texte ;
+  chaque tour suivant s'ajoute à cet historique.
+- **Les réglages, ici.** Provider (LM Studio / Ollama / Ollama Cloud), URL, modèle, clé
+  API, température, max tokens, limite d'historique, modèle d'embeddings — ainsi que le
+  prompt système et le contexte de référence propres à la conversation.
+- **Tes conversations, ici.** Le bouton **Conversations…** du node *Session* liste tous
+  les chats enregistrés avec leur nombre de messages et leur modèle : un graphe peut
+  donc continuer une conversation existante, en ouvrir une nouvelle, ou revenir à `auto`.
+- **La gestion des conversations, ici.** La même liste dans le panneau latéral : changer
+  de chat, le renommer, le supprimer. Tout l'historique est persisté en SQLite et reste
+  éditable tour par tour.
 
-![Panneau de chat et chaine de nodes ecrivant un JSON de scene pour un rendu photorealiste](examples/example-1-photoreal-prompt.png)
-
-**2 — Iteration sur place.** Meme session, un tour de plus : "change the style in anime
-90's". Le modele reecrit tout le JSON (nouveaux `items`, nouveau `caption`, meme
-composition) et le run suivant rend la version anime — sans copier-coller entre deux
-runs :
-
-![Meme chaine apres une demande de style anime annees 90, avec la nouvelle image rendue](examples/example-2-anime-restyle.png)
+![Vue d'ensemble annotée : le panneau de tchat ChatHub, la chaîne de nodes, les réglages et où trouver et gérer les conversations](examples/chathub-overview.png)
 
 ---
 
