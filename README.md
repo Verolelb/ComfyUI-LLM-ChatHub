@@ -35,6 +35,12 @@ than a series of screenshots. The **Session** node opens the conversation, the *
 node sits between it and the graph — its `reply` output feeds *Preview as Text*, and the
 JSON it returns is what the workflow turns into the final image.
 
+▶ **51-second video demo** — a starting prompt goes in, the answer streams in the
+panel, and the JSON the *Chat* node returns becomes the image on the right. Click the
+picture to play it (1080p, with sound):
+
+[![Video demo: the ChatHub panel streaming an answer beside the workflow it feeds](examples/chathub-demo-poster.jpg)](examples/chathub-demo.mp4)
+
 - **Chat here, like in ChatGPT or Gemini.** The **ChatHub** tab docks in ComfyUI's
   sidebar with the usual chat layout: your turns on one side, the model's answer
   streaming on the other. A session starts from a *starting prompt* and can carry a
