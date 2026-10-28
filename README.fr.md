@@ -116,6 +116,19 @@ La clé peut aussi venir d'une variable d'environnement : `OLLAMA_API_KEY`,
 
 ## 3. Utiliser le panneau de chat
 
+Le bord droit du panneau **est** la poignée : une fine ligne le longe de haut en bas,
+avec un petit bouton à mi-hauteur. Attrape ce bord n'importe où (sur l'historique comme
+sur la zone de saisie) et fais-le glisser pour élargir ou rétrécir la barre latérale
+quand le texte est coupé ; un badge `px` affiche la largeur pendant le glissement. La
+largeur est mémorisée, le panneau se rouvre donc à la taille choisie, et le canevas du
+graphe prend le reste de la fenêtre. La poignée n'apparaît que dans la barre latérale
+de ComfyUI — rien à faire glisser dans la fenêtre flottante de repli.
+
+La zone de saisie a sa propre poignée : la barre horizontale juste au-dessus du champ
+de texte. Tire-la vers le haut pour te donner plus de place pour écrire (l'historique
+garde le reste), vers le bas pour la réduire ; la hauteur est mémorisée elle aussi. La
+petite poignée d'angle en bas à droite du champ continue de fonctionner normalement.
+
 **Settings** occupe tout le panneau tant qu'il est ouvert : l'historique, les pastilles
 de statut et la zone de saisie s'effacent pour que toutes les options tiennent à
 l'écran au lieu d'être dans une petite boîte avec ascenseur. **Hide settings** ramène

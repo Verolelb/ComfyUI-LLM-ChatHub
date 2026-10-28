@@ -35,6 +35,7 @@ const state = {
   index: { documents: 0, chunks: 0, embedded: 0, folder: "" },
   documents: [],
   modelCache: {},
+  composerHeight: 0,
   status: "",
   error: "",
 };
@@ -192,7 +193,40 @@ const CSS = `
 .llmch-root { display:flex; flex-direction:column; height:100%; width:100%; gap:6px;
   font-family:system-ui,-apple-system,"Segoe UI",sans-serif; font-size:12px;
   color:var(--fg-color,#e6e6e6); background:var(--comfy-menu-bg,#1e1e1e);
-  box-sizing:border-box; padding:6px; overflow:hidden; }
+  box-sizing:border-box; padding:6px; padding-right:12px; overflow:hidden;
+  position:relative; }
+/* Grip on the right edge: ComfyUI's own splitter handle is one pixel wide and
+   invisible, so the panel looked fixed-width. The strip covers the whole edge
+   (top to bottom, over the transcript and the composer) and draws a visible seam
+   plus a knob, so it reads as a handle instead of a scrollbar. */
+.llmch-grip { position:absolute; top:0; right:0; bottom:0; width:10px; z-index:6;
+  cursor:col-resize; touch-action:none; }
+.llmch-grip:before { content:""; position:absolute; top:0; bottom:0; right:3px; width:2px;
+  border-radius:2px; background:var(--border-color,#3a3a3a); opacity:.75;
+  transition:opacity .12s ease, background .12s ease; }
+.llmch-grip:after { content:""; position:absolute; right:0; top:50%; width:7px; height:64px;
+  transform:translateY(-50%); border-radius:4px; background:var(--border-color,#4a4a4a);
+  border:1px solid var(--border-color,#5a5a5a); box-shadow:0 0 0 1px rgba(0,0,0,.25);
+  transition:background .12s ease, height .12s ease; }
+/* Horizontal grip: the top edge of the message box, so the input can be made
+   taller by dragging it up (the browser only offers its own grip at the bottom). */
+.llmch-grip-h { position:relative; height:9px; margin:-1px 0 0; cursor:row-resize;
+  touch-action:none; display:flex; align-items:center; justify-content:center; }
+.llmch-grip-h:before { content:""; position:absolute; left:0; right:0; top:50%; height:2px;
+  transform:translateY(-50%); border-radius:2px; background:var(--border-color,#3a3a3a);
+  opacity:.6; transition:opacity .12s ease, background .12s ease; }
+.llmch-grip-h:after { content:""; position:relative; width:38px; height:5px; border-radius:3px;
+  background:var(--border-color,#4a4a4a); border:1px solid var(--border-color,#5a5a5a);
+  transition:background .12s ease; }
+.llmch-grip-h:hover:before, .llmch-grip-h.llmch-dragging:before,
+.llmch-grip-h:hover:after, .llmch-grip-h.llmch-dragging:after {
+  background:var(--p-primary-color,#3b82f6); opacity:1; }
+.llmch-grip-badge { position:absolute; font-size:10px; padding:2px 6px; border-radius:6px;
+  white-space:nowrap; color:#fff; background:var(--p-primary-color,#3b82f6); pointer-events:none; }
+.llmch-grip:hover:before, .llmch-grip.llmch-dragging:before,
+.llmch-grip:hover:after, .llmch-grip.llmch-dragging:after {
+  background:var(--p-primary-color,#3b82f6); opacity:1; }
+.llmch-grip:hover:after, .llmch-grip.llmch-dragging:after { height:88px; }
 .llmch-root * { box-sizing:border-box; }
 .llmch-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
 .llmch-grow { flex:1 1 auto; min-width:0; }
@@ -272,6 +306,193 @@ const CSS = `
 function injectCss() {
   if (document.getElementById("llmch-style")) return;
   document.head.append(el("style", { id: "llmch-style", text: CSS }));
+}
+
+/* ------------------------------------------------------------------ panel width */
+
+const SIDE_WIDTH_KEY = "llmch.sidebar.width";
+const SIDE_MIN_WIDTH = 280;
+const SIDE_MIN_CANVAS = 160;
+
+const COMPOSER_HEIGHT_KEY = "llmch.composer.height";
+const COMPOSER_MIN_HEIGHT = 64;
+
+/**
+ * The ComfyUI panel that hosts the tab (absent in the floating fallback).
+ *
+ * Current builds put sidebar tabs in `.side-bar-panel`; older ones and the right
+ * panel use other wrappers, so fall back to "the ancestor that sits next to a
+ * splitter handle", which is exactly the panel we are allowed to resize.
+ */
+function sidebarPanel() {
+  if (!rootEl) return null;
+  try {
+    const known = rootEl.closest(".side-bar-panel, #first-side-panel, #right-side-panel, .right-side-panel");
+    if (known) return known;
+    let node = rootEl;
+    while (node && node.parentElement && node.parentElement !== document.body) {
+      const parent = node.parentElement;
+      const resizable = [...parent.children].some(
+        (child) => child !== node && child.getAttribute("role") === "separator",
+      );
+      if (resizable) return node;
+      node = parent;
+    }
+  } catch { /* detached node */ }
+  return null;
+}
+
+/**
+ * Resize the sidebar through the same flex percentages ComfyUI's splitter uses,
+ * so the neighbouring panel keeps the rest of the row instead of overflowing.
+ */
+function applySidebarWidth(width, persist = true) {
+  const panel = sidebarPanel();
+  const group = panel?.parentElement;
+  if (!panel || !group) return 0;
+  const others = [...group.children].filter(
+    (child) => child !== panel && child.getAttribute("role") !== "separator",
+  );
+  const total = group.getBoundingClientRect().width || 0;
+  if (!total) return 0;
+  const largest = Math.max(SIDE_MIN_WIDTH, total - SIDE_MIN_CANVAS);
+  const clamped = Math.round(Math.min(Math.max(Number(width) || 0, SIDE_MIN_WIDTH), largest));
+  const percent = (clamped / total) * 100;
+  panel.style.flex = `${percent} 1 0px`;
+  const rest = Math.max(0, 100 - percent) / Math.max(1, others.length);
+  for (const other of others) other.style.flex = `${rest} 1 0px`;
+  if (persist) {
+    try { localStorage.setItem(SIDE_WIDTH_KEY, String(clamped)); } catch { /* private mode */ }
+  }
+  return clamped;
+}
+
+function savedSidebarWidth() {
+  try {
+    const value = Number(localStorage.getItem(SIDE_WIDTH_KEY));
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function restoreSidebarWidth() {
+  const width = savedSidebarWidth();
+  if (width) applySidebarWidth(width, false);
+}
+
+/** Height of the message box, remembered between sessions (0 = never dragged). */
+function savedComposerHeight() {
+  try {
+    const value = Number(localStorage.getItem(COMPOSER_HEIGHT_KEY));
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function applyComposerHeight(textarea, height) {
+  const value = Math.max(COMPOSER_MIN_HEIGHT, Math.round(Number(height) || 0));
+  state.composerHeight = value;
+  if (textarea) textarea.style.height = `${value}px`;
+  return value;
+}
+
+/**
+ * Grip on the top edge of the message box.
+ *
+ * The browser only gives a `<textarea>` a grip in its bottom-right corner, so the
+ * input could only be made taller by pulling that corner down. This one sits on the
+ * top edge: pull it up and the box grows instead of shrinking the transcript.
+ */
+function composerResizeGrip(textarea) {
+  const grip = el("div", {
+    class: "llmch-grip-h",
+    title: "Drag up or down to resize the message box",
+  });
+  grip.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startY = event.clientY;
+    const startHeight = textarea.getBoundingClientRect().height;
+    const room = rootEl ? rootEl.getBoundingClientRect().height : 600;
+    const largest = Math.max(COMPOSER_MIN_HEIGHT + 40, Math.round(room * 0.55));
+    grip.classList.add("llmch-dragging");
+    try { grip.setPointerCapture(event.pointerId); } catch { /* synthetic pointer */ }
+    const badge = el("span", {
+      class: "llmch-grip-badge",
+      style: "left:50%;bottom:12px;transform:translateX(-50%)",
+      text: `${Math.round(startHeight)} px`,
+    });
+    grip.append(badge);
+
+    const onMove = (moveEvent) => {
+      // Upwards grows the box: the delta is inverted on purpose.
+      const wanted = startHeight + (startY - moveEvent.clientY);
+      const next = Math.min(Math.max(wanted, COMPOSER_MIN_HEIGHT), largest);
+      applyComposerHeight(textarea, next);
+      badge.textContent = `${state.composerHeight} px`;
+      moveEvent.preventDefault();
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      grip.classList.remove("llmch-dragging");
+      badge.remove();
+      try { localStorage.setItem(COMPOSER_HEIGHT_KEY, String(state.composerHeight)); } catch { /* private mode */ }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
+  return grip;
+}
+
+/** Drag handle on the right edge of the panel: resizes the whole left sidebar. */
+function resizeGrip() {
+  if (!sidebarPanel()) return null; // floating fallback: nothing to resize
+  const grip = el("div", {
+    class: "llmch-grip",
+    title: "Drag this edge to resize the panel",
+  });
+  grip.addEventListener("pointerdown", (event) => {
+    const panel = sidebarPanel();
+    if (!panel || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = panel.getBoundingClientRect().width;
+    grip.classList.add("llmch-dragging");
+    try { grip.setPointerCapture(event.pointerId); } catch { /* synthetic pointer */ }
+    // A live pixel readout makes it obvious that the edge is being dragged.
+    const badge = el("span", {
+      class: "llmch-grip-badge",
+      style: "right:12px;top:50%;transform:translateY(-50%)",
+      text: `${Math.round(startWidth)} px`,
+    });
+    grip.append(badge);
+
+    const onMove = (moveEvent) => {
+      const width = applySidebarWidth(startWidth + (moveEvent.clientX - startX), false);
+      if (width) badge.textContent = `${width} px`;
+      moveEvent.preventDefault();
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      grip.classList.remove("llmch-dragging");
+      badge.remove();
+      const current = sidebarPanel()?.getBoundingClientRect().width;
+      if (current) applySidebarWidth(current);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  });
+  return grip;
 }
 
 /* ------------------------------------------------------------------ api glue */
@@ -593,6 +814,9 @@ function renderComposer() {
     rows: 3,
   });
   textarea.value = state.draft || "";
+  // A height chosen with the top grip (or in a previous session) wins over rows=3.
+  if (!state.composerHeight) state.composerHeight = savedComposerHeight();
+  if (state.composerHeight) applyComposerHeight(textarea, state.composerHeight);
   textarea.addEventListener("input", () => { state.draft = textarea.value; });
   textarea.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -633,6 +857,7 @@ function renderComposer() {
 
   return el("div", { class: "llmch-composer llmch-section" }, [
     thumbs,
+    composerResizeGrip(textarea),
     textarea,
     el("div", { class: "llmch-row" }, [
       el("button", { class: "llmch-btn", text: "Image", onclick: () => fileInput.click() }),
@@ -1149,6 +1374,7 @@ function renderAll() {
     el("div", { class: "llmch-messages" }),
     renderComposer(),
     el("div", { class: `llmch-status${state.error ? " error" : ""}`, text: state.status }),
+    resizeGrip(),
   ];
   rootEl.replaceChildren(...nodes.filter(Boolean));
   renderMessages();
@@ -1201,6 +1427,8 @@ async function mount(target) {
     if (first) await openConversation(first.id);
     else await newConversation();
     renderAll();
+    // The width chosen with the grip survives a tab switch and a ComfyUI restart.
+    restoreSidebarWidth();
     setStatus("Ready.");
   } catch (error) {
     rootEl.replaceChildren(el("div", { class: "llmch-empty", text: `ChatHub unavailable: ${error.message}` }));

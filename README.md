@@ -107,8 +107,20 @@ The key can also come from an environment variable: `OLLAMA_API_KEY`,
 ## 3. Using the chat panel
 
 The panel is the **ChatHub** button in ComfyUI's left vertical icon bar (between *Apps*
-and *Templates*). One click opens it, a second click on the same tab closes it; drag
-its right edge to widen the sidebar if the text looks clipped.
+and *Templates*). One click opens it, a second click on the same tab closes it.
+
+The panel's right edge is a handle: a thin seam runs along it from top to bottom, with
+a small knob halfway up. Grab that edge anywhere (over the transcript or over the
+message box) and drag it to widen or narrow the sidebar when the text looks clipped;
+a live `px` badge shows the width while you drag. The width is remembered, so the panel
+reopens at the size you chose, and the graph canvas takes the rest of the window. The
+handle only appears inside ComfyUI's sidebar — there is nothing to drag on the
+floating fallback window.
+
+The message box has its own handle too: the horizontal bar just above the text field.
+Drag it up to give yourself more room to write (the transcript keeps the rest), drag it
+down to shrink it; the height is remembered as well. The corner grip at the bottom
+right of the text field still works as usual.
 
 **Settings** takes over the whole panel while it is open: the transcript, the status
 chips and the composer step aside so every option is on screen instead of inside a
