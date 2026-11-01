@@ -226,6 +226,27 @@ def register_routes() -> None:
             return _json_error(str(error), 502)
         return web.json_response({"ok": True, "models": names})
 
+    @routes.post("/llm_chathub/unload")
+    async def unload_models(request: web.Request):
+        data = await _payload(request)
+        try:
+            resolved = config.resolve_provider(
+                data.get("provider"),
+                model=data.get("model") or None,
+                base_url=data.get("base_url") or None,
+                api_key=data.get("api_key") if data.get("api_key") else None,
+            )
+            result = await asyncio.to_thread(
+                providers.unload_models,
+                resolved["provider"],
+                resolved["base_url"],
+                resolved.get("model") or "",
+                resolved["api_key"],
+            )
+        except Exception as error:  # noqa: BLE001
+            return _json_error(str(error), 502)
+        return web.json_response({"ok": True, **result})
+
     # ---------------------------------------------------------------- conversations
 
     @routes.get("/llm_chathub/conversations")

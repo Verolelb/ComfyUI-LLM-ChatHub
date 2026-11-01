@@ -60,6 +60,21 @@ def provider_hint(provider: str) -> str:
     return config.PROVIDER_DEFAULTS[provider]["hint"]
 
 
+def _server_root(provider: str, base_url: str) -> str:
+    """Base URL without the OpenAI-style suffix (``/v1``, ``/api/v0``...).
+
+    LM Studio's model management endpoints live at the root of its server
+    (``/api/v1/models``), while the configured base URL points at ``/v1``.
+    """
+    base = _base(base_url, provider)
+    if provider == "lmstudio":
+        for suffix in ("/api/v1", "/api/v0", "/v1"):
+            if base.endswith(suffix):
+                base = base[: -len(suffix)].rstrip("/")
+                break
+    return base
+
+
 # --------------------------------------------------------------------------- payloads
 
 
@@ -303,6 +318,157 @@ def list_models(provider: str, base_url: str, api_key: str = "", timeout: float 
             ]
         names = [item.get("name") or item.get("model") or "" for item in entries]
     return sorted({name for name in names if name})
+
+
+def unload_models(
+    provider: str,
+    base_url: str,
+    model: str = "",
+    api_key: str = "",
+    timeout: float = 20.0,
+) -> dict:
+    """Free the models currently loaded in LM Studio or Ollama.
+
+    Returns ``{"provider", "unloaded", "errors"}``. ``unloaded`` lists what the
+    provider confirmed as released; ``errors`` carries per-model failures without
+    turning the whole call into an exception.
+    """
+    provider = config.normalize_provider(provider)
+    if provider == "ollama":
+        return _unload_ollama(base_url, model, api_key, timeout)
+    if provider == "lmstudio":
+        return _unload_lmstudio(base_url, model, api_key, timeout)
+    raise ProviderError(
+        "Ollama Cloud runs on the remote server: there is no local model to unload."
+    )
+
+
+def _unload_ollama(base_url: str, model: str, api_key: str, timeout: float) -> dict:
+    headers = _headers(api_key)
+    try:
+        response = requests.get(
+            endpoint("ollama", base_url, "/api/ps"), headers=headers, timeout=timeout
+        )
+    except requests.RequestException as error:
+        raise _connection_error("ollama", error) from error
+    if response.status_code >= 400:
+        _raise_http("ollama", response.status_code, response.text)
+    try:
+        data = response.json()
+    except ValueError as error:
+        raise ProviderError(f"Unreadable reply from ollama: {error}") from error
+
+    running = []
+    for entry in data.get("models") or []:
+        name = entry.get("name") or entry.get("model") or ""
+        if name:
+            running.append(name)
+
+    unloaded, errors = [], []
+    for name in running:
+        body = {"model": name, "keep_alive": 0, "stream": False}
+        try:
+            dropped = requests.post(
+                endpoint("ollama", base_url, "/api/generate"),
+                headers=headers,
+                data=json.dumps(body),
+                timeout=timeout,
+            )
+        except requests.RequestException as error:
+            errors.append(f"{name}: {connection_reason(error)}")
+            continue
+        if dropped.status_code >= 400:
+            errors.append(f"{name}: HTTP {dropped.status_code}")
+            continue
+        unloaded.append(name)
+    return {"provider": "ollama", "unloaded": unloaded, "errors": errors}
+
+
+def _unload_lmstudio(base_url: str, model: str, api_key: str, timeout: float) -> dict:
+    root = _server_root("lmstudio", base_url)
+    headers = _headers(api_key)
+    try:
+        response = requests.get(f"{root}/api/v1/models", headers=headers, timeout=timeout)
+    except requests.RequestException as error:
+        raise _connection_error("lmstudio", error) from error
+
+    if response.status_code == 404:
+        # LM Studio 0.3.x only ships the older, undocumented native endpoints.
+        return _unload_lmstudio_v0(root, headers, timeout)
+    if response.status_code >= 400:
+        _raise_http("lmstudio", response.status_code, response.text)
+    try:
+        data = response.json()
+    except ValueError as error:
+        raise ProviderError(f"Unreadable reply from lmstudio: {error}") from error
+
+    instances = []
+    for entry in data.get("models") or []:
+        for instance in entry.get("loaded_instances") or []:
+            instance_id = instance.get("id")
+            if instance_id:
+                instances.append(instance_id)
+
+    unloaded, errors = [], []
+    for instance_id in instances:
+        try:
+            dropped = requests.post(
+                f"{root}/api/v1/models/unload",
+                headers=headers,
+                data=json.dumps({"instance_id": instance_id}),
+                timeout=timeout,
+            )
+        except requests.RequestException as error:
+            errors.append(f"{instance_id}: {connection_reason(error)}")
+            continue
+        if dropped.status_code >= 400:
+            errors.append(f"{instance_id}: HTTP {dropped.status_code}")
+            continue
+        unloaded.append(instance_id)
+    return {"provider": "lmstudio", "unloaded": unloaded, "errors": errors}
+
+
+def _unload_lmstudio_v0(root: str, headers: dict, timeout: float) -> dict:
+    """Unload through the endpoints LM Studio 0.3.x exposes at ``/api/v0``."""
+    try:
+        probe = requests.get(f"{root}/api/v0/models", headers=headers, timeout=timeout)
+    except requests.RequestException as error:
+        raise _connection_error("lmstudio", error) from error
+    if probe.status_code == 404:
+        raise ProviderError(
+            "This LM Studio version has no unload endpoint. Update LM Studio to 0.4.0 "
+            "or newer, or run `lms unload --all` in a terminal."
+        )
+    if probe.status_code >= 400:
+        _raise_http("lmstudio", probe.status_code, probe.text)
+    try:
+        data = probe.json()
+    except ValueError as error:
+        raise ProviderError(f"Unreadable reply from lmstudio: {error}") from error
+
+    loaded = []
+    for entry in (data.get("data") if isinstance(data, dict) else None) or []:
+        name = entry.get("id") or ""
+        if name and str(entry.get("state") or "").lower() == "loaded":
+            loaded.append(name)
+
+    unloaded, errors = [], []
+    for name in loaded:
+        try:
+            dropped = requests.post(
+                f"{root}/api/v0/models/unload",
+                headers=headers,
+                data=json.dumps({"model": name}),
+                timeout=timeout,
+            )
+        except requests.RequestException as error:
+            errors.append(f"{name}: {connection_reason(error)}")
+            continue
+        if dropped.status_code >= 400:
+            errors.append(f"{name}: HTTP {dropped.status_code}")
+            continue
+        unloaded.append(name)
+    return {"provider": "lmstudio", "unloaded": unloaded, "errors": errors}
 
 
 def stream_chat(

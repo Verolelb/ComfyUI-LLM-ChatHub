@@ -1644,6 +1644,72 @@ function attachConversationPicker(node) {
   if (!button) node.__llmchConvPicker = false;
 }
 
+/**
+ * Free the models the Provider node points at.
+ *
+ * "panel (saved settings)" keeps the real connection in the panel, so the node's
+ * own URL/model widgets are stale leftovers: send nothing and let the server use
+ * the active settings instead.
+ */
+async function unloadProviderModels(node) {
+  const value = (name) => String(node.widgets?.find((widget) => widget.name === name)?.value ?? "").trim();
+  const choice = value("provider");
+  const body = /^panel/i.test(choice)
+    ? {}
+    : {
+      provider: choice || undefined,
+      base_url: value("base_url") || undefined,
+      model: value("model") || undefined,
+      api_key: value("api_key") || undefined,
+    };
+  return postJSON(`${BASE}/unload`, body);
+}
+
+function attachUnloadModels(node) {
+  if (!node?.widgets || node.__llmchUnload) return;
+  if (!node.widgets.find((widget) => widget.name === "provider")) return;
+  node.__llmchUnload = true;
+
+  const label = "Unload model(s)";
+  const button = node.addWidget("button", label, null, async () => {
+    button.name = "Unloading...";
+    try { node.setDirtyCanvas?.(true, true); } catch { /* noop */ }
+    try {
+      const data = await unloadProviderModels(node);
+      const names = data.unloaded || [];
+      notify(
+        names.length ? "Model(s) unloaded" : "No model loaded",
+        names.length ? names.join(", ") : `${data.provider || "provider"}: nothing was loaded.`,
+        (data.errors || []).length ? "warn" : "success",
+      );
+      if ((data.errors || []).length) notify("Unload warning", data.errors.join(", "), "warn");
+    } catch (error) {
+      notify("Unload failed", String(error?.message || error), "error");
+    } finally {
+      button.name = label;
+      try { node.setDirtyCanvas?.(true, true); } catch { /* noop */ }
+    }
+  }, { serialize: false });
+  if (!button) node.__llmchUnload = false;
+}
+
+app.registerExtension({
+  name: "LLM.ChatHub.Unload",
+  async beforeRegisterNodeDef(nodeType, nodeData) {
+    if (!["LLMChatHubProvider", "LCProvider"].includes(nodeData?.name)) return;
+    const onNodeCreated = nodeType.prototype.onNodeCreated;
+    nodeType.prototype.onNodeCreated = function () {
+      const result = onNodeCreated?.apply(this, arguments);
+      try {
+        attachUnloadModels(this);
+      } catch (error) {
+        console.warn("[LLM ChatHub] unload button unavailable", error);
+      }
+      return result;
+    };
+  },
+});
+
 app.registerExtension({
   name: "LLM.ChatHub.RagUpload",
   async beforeRegisterNodeDef(nodeType, nodeData) {

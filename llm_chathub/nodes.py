@@ -11,7 +11,7 @@ import json
 import os
 import re
 
-from . import config, engine, rag, store
+from . import config, engine, providers, rag, store
 
 CATEGORY = "LLM ChatHub"
 CONFIG_TYPE = "CHATHUB_CONFIG"
@@ -71,6 +71,7 @@ def _make_config(
     max_tokens: int = 1024,
     history_limit: int = 20,
     embed_model: str = "",
+    auto_unload: bool = False,
 ) -> dict:
     panel = provider_choice in PANEL_CHOICES
     name = None if panel else provider_choice
@@ -95,6 +96,7 @@ def _make_config(
         "embed_model": (embed_model or "").strip() or resolved["embed_model"],
         "timeout": resolved["timeout"],
         "source": provider_choice,
+        "auto_unload": bool(auto_unload),
     }
 
 
@@ -128,6 +130,10 @@ class LCProvider:
                 "max_tokens": ("INT", {"default": 1024, "min": 16, "max": 131072}),
                 "history_limit": ("INT", {"default": 20, "min": 0, "max": 200}),
                 "embed_model": ("STRING", {"default": "", "multiline": False}),
+                "auto_unload": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Unload the model right after each Chat reply, freeing VRAM for the rest of the workflow.",
+                }),
             }
         }
 
@@ -142,9 +148,17 @@ class LCProvider:
         # reuses the cached config and a provider switch never reaches the nodes.
         return config.connection_fingerprint()
 
-    def run(self, provider, base_url, model, api_key, temperature, max_tokens, history_limit, embed_model):
+    def run(self, provider, base_url, model, api_key, temperature, max_tokens, history_limit, embed_model, auto_unload=False):
         conf = _make_config(
-            provider, base_url, model, api_key, temperature, max_tokens, history_limit, embed_model
+            provider,
+            base_url,
+            model,
+            api_key,
+            temperature,
+            max_tokens,
+            history_limit,
+            embed_model,
+            auto_unload,
         )
         info = (
             f"{conf['label']} | url={conf['base_url']} | model={conf['model'] or '(none)'} "
@@ -321,27 +335,41 @@ class LCChat:
             frames = frames[:1]
 
         replies = []
-        for frame in frames:
-            payloads = [engine.tensor_to_base64(frame)] if frame is not None else []
-            result = engine.run_chat(
-                conversation_id,
-                text,
-                image_payloads=payloads if persist else None,
-                attach_b64=None if persist else payloads,
-                persist=bool(persist),
-                connection=connection,
-                seed=None if seed is None else int(seed),
-                image_system_prompt=image_system_prompt,
-                **overrides,
-            )
-            if result.get("error") and not result.get("reply"):
-                raise RuntimeError(result["error"])
-            if not result.get("reply") and result.get("reasoning"):
-                raise RuntimeError(
-                    "The model reasoned without producing a reply: raise 'max_tokens' "
-                    "(the reasoning consumes the budget)."
+        try:
+            for frame in frames:
+                payloads = [engine.tensor_to_base64(frame)] if frame is not None else []
+                result = engine.run_chat(
+                    conversation_id,
+                    text,
+                    image_payloads=payloads if persist else None,
+                    attach_b64=None if persist else payloads,
+                    persist=bool(persist),
+                    connection=connection,
+                    seed=None if seed is None else int(seed),
+                    image_system_prompt=image_system_prompt,
+                    **overrides,
                 )
-            replies.append(result.get("reply") or "")
+                if result.get("error") and not result.get("reply"):
+                    raise RuntimeError(result["error"])
+                if not result.get("reply") and result.get("reasoning"):
+                    raise RuntimeError(
+                        "The model reasoned without producing a reply: raise 'max_tokens' "
+                        "(the reasoning consumes the budget)."
+                    )
+                replies.append(result.get("reply") or "")
+        finally:
+            # Best effect: the reply is already in hand, so a failure here must
+            # never turn a successful run into an error.
+            if conf.get("auto_unload"):
+                try:
+                    providers.unload_models(
+                        conf.get("provider") or "",
+                        conf.get("base_url") or "",
+                        conf.get("model") or "",
+                        conf.get("api_key") or "",
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
 
         messages = store.list_messages(conversation_id) if persist else []
         return ("\n\n".join(replies), _transcript(messages), conversation_id or "")
